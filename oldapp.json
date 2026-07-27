@@ -35,8 +35,6 @@
         "VIBRATE",
         "WAKE_LOCK",
         "POST_NOTIFICATIONS",
-        "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
-        "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_BACKGROUND_LOCATION",

@@ -1,0 +1,36 @@
+// --- TEMAS / PALETAS DE CORES DA APLICAÇÃO ---
+export const THEMES = {
+  default: {
+    id: 'default',
+    name: 'Sálvia & Menta',
+    COLOR_BG_MAIN: '#E8F0EC',
+    COLOR_CARD_BG: '#F4F8F5',
+    COLOR_PRIMARY: '#2D4A3E',
+    COLOR_SECONDARY: '#52796F',
+    COLOR_DIVIDER: '#C2D5C9',
+    COLOR_LIME_ENERGY: '#73B08C',
+    COLOR_RED_ACCENT: '#D97770',
+  },
+  wellness: {
+    id: 'wellness',
+    name: 'Azul Sereno',
+    COLOR_BG_MAIN: '#EBF2F7',
+    COLOR_CARD_BG: '#F5F9FC',
+    COLOR_PRIMARY: '#2B3A4A',
+    COLOR_SECONDARY: '#526E85',
+    COLOR_DIVIDER: '#C8D7E3',
+    COLOR_LIME_ENERGY: '#6BA4C8',
+    COLOR_RED_ACCENT: '#E07A5F',
+  },
+  neon: {
+    id: 'neon',
+    name: 'Areia & Mostarda',
+    COLOR_BG_MAIN: '#F5F0EB',
+    COLOR_CARD_BG: '#FAF6F0',
+    COLOR_PRIMARY: '#3D3228',
+    COLOR_SECONDARY: '#7A6855',
+    COLOR_DIVIDER: '#DDD3C7',
+    COLOR_LIME_ENERGY: '#D99B26',
+    COLOR_RED_ACCENT: '#C85A54',
+  },
+};
