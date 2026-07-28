@@ -22,10 +22,26 @@ export default function ActiveExerciseScreen({
   profile,
   isPaused,
   onTogglePause,
+  onFinishUser,
   onCancel,
+  noSignalAlert,
 }) {
+  // Ponto 2: Cálculo da Contagem Decrescente para o Desafio Morte Súbita
+  const currentSDBlock = SUDDEN_DEATH_BLOCKS[suddenDeathBlock - 1];
+  const maxBlockTime = currentSDBlock ? currentSDBlock.timeSec : 0;
+  const remainingBlockTime = Math.max(0, maxBlockTime - seconds);
+
   return (
     <ScrollView contentContainerStyle={styles.activeExerciseScroll}>
+      {/* Ponto 5: Aviso de Falta de GPS / Rede no topo do menu ativo */}
+      {noSignalAlert && (
+        <View style={{ backgroundColor: '#ef4444', padding: 12, borderRadius: 8, marginBottom: 12 }}>
+          <Text style={{ color: '#ffffff', fontWeight: 'bold', textAlign: 'center' }}>
+            ⚠️ Sem sinal de GPS ou de Rede Móvel. Aguarde ou volte ao menu anterior.
+          </Text>
+        </View>
+      )}
+
       <View style={styles.headerContainerActive}>
         <Text style={styles.activeTitle}>{exerciseTitle}</Text>
       </View>
@@ -43,6 +59,7 @@ export default function ActiveExerciseScreen({
         />
       </View>
 
+      {/* Ponto 2: Card Morte Súbita com Contagem Decrescente */}
       {exerciseType === 'challenge_morte_subita' && (
         <View style={styles.rockportProgressCard}>
           <View style={styles.rockportHeaderRow}>
@@ -53,8 +70,10 @@ export default function ActiveExerciseScreen({
             <View style={[styles.progressBarFill, { width: `${Math.min(100, (distance / (suddenDeathBlock * 0.1)) * 100)}%` }]} />
           </View>
           <View style={styles.recordHighlightBox}>
-            <Text style={styles.recordTitle}>TEMPO LIMITE DO BLOCO</Text>
-            <Text style={styles.recordValue}>{SUDDEN_DEATH_BLOCKS[suddenDeathBlock - 1]?.timeSec} segundos</Text>
+            <Text style={styles.recordTitle}>CONTAGEM DECRESCENTE DO BLOCO</Text>
+            <Text style={{ fontSize: 28, fontWeight: 'bold', color: '#ef4444', textAlign: 'center', marginTop: 4 }}>
+              {formatHMS(remainingBlockTime)}
+            </Text>
           </View>
         </View>
       )}
@@ -108,13 +127,28 @@ export default function ActiveExerciseScreen({
         </View>
       </View>
 
-      <View style={styles.activeBtnRow}>
-        <TouchableOpacity style={styles.pauseBtn} onPress={onTogglePause}>
-          <Text style={styles.pauseBtnText}>{isPaused ? 'RETOMAR' : 'PAUSAR'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
-          <Text style={styles.cancelBtnText}>CANCELAR</Text>
-        </TouchableOpacity>
+      {/* Botões de Ação do Exercício */}
+      <View style={{ gap: 10, marginTop: 15, width: '100%' }}>
+        {/* Ponto 1: Botão para Terminar e Guardar (Caminhada livre ou treinos sem meta fixa) */}
+        {(exerciseType === 'walk_normal' || !activeConfig?.targetTimeSec) && (
+          <TouchableOpacity 
+            style={[styles.actionBtnLight, { backgroundColor: '#22c55e', paddingVertical: 14 }]} 
+            onPress={onFinishUser}
+          >
+            <Text style={[styles.actionBtnTextDark, { color: '#ffffff', fontWeight: 'bold', textAlign: 'center' }]}>
+              TERMINAR E GUARDAR
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        <View style={styles.activeBtnRow}>
+          <TouchableOpacity style={styles.pauseBtn} onPress={onTogglePause}>
+            <Text style={styles.pauseBtnText}>{isPaused ? 'RETOMAR' : 'PAUSAR'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
+            <Text style={styles.cancelBtnText}>CANCELAR</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </ScrollView>
   );

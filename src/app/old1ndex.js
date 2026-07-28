@@ -3,13 +3,11 @@ import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import Constants from 'expo-constants';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as Location from 'expo-location';
-import * as Network from 'expo-network';
 import * as Speech from 'expo-speech';
 import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   AppState,
-  ImageBackground,
   Platform,
   SafeAreaView,
   StatusBar,
@@ -34,8 +32,6 @@ import {
 import AppModals from './components/modals/AppModals';
 import MainScreen from './components/MainScreen';
 import ActiveExerciseScreen from './components/ActiveExerciseScreen';
-
-const APP_BACKGROUND_IMAGE = require('../../assets/images/fundo.png');
 
 export default function App() {
   const [currentTheme, setCurrentTheme] = useState('default');
@@ -85,9 +81,6 @@ export default function App() {
 
   const [showEsquinaModal, setShowEsquinaModal] = useState(false);
   const esquinaTargetMultiplierRef = useRef(1);
-
-  // --- NOVO: Estado de perda de GPS / Rede ---
-  const [noSignalAlert, setNoSignalAlert] = useState(false);
   
   const appState = useRef(AppState.currentState);
   const hasGoneBackgroundRef = useRef(false);
@@ -103,10 +96,6 @@ export default function App() {
   const totalPausedTimeRef = useRef(0);
   const lastCadenceNoticeTime = useRef(0);
   const lastMilhaNoticeStep = useRef(0);
-
-  // --- NOVO: Ref de segurança (Ponto 3) ---
-  const lastMovementTimeRef = useRef(Date.now());
-  const safetyPauseTriggeredRef = useRef(false);
 
   const isPausedRef = useRef(false);
   const isExercisingRef = useRef(false);
@@ -216,7 +205,7 @@ export default function App() {
   const promptBatteryOptimizationIfNeeded = async () => {
     if (Platform.OS !== 'android') return;
     try {
-      const alreadyWarned = await AsyncStorage.setItem('@battery_optimization_warned');
+      const alreadyWarned = await AsyncStorage.getItem('@battery_optimization_warned');
       if (!alreadyWarned) {
         setShowBatteryOptimizationModal(true);
       }
@@ -331,6 +320,13 @@ export default function App() {
     }
   };
 
+
+
+
+
+
+
+
   const check1MilhaAudioMotivation = (currentMeters, currentSec) => {
     const step = Math.floor(currentMeters / 250);
     if (step > lastMilhaNoticeStep.current && step <= 6) {
@@ -350,6 +346,7 @@ export default function App() {
       }
     }
   };
+
 
   const handleSelectProgramSession = (targetSessionIdx) => {
     if (targetSessionIdx === currentSessionIndex) {
@@ -432,59 +429,8 @@ export default function App() {
     );
   };
 
-  // --- NOVO: Função para ativar a Pausa de Segurança (Ponto 3) ---
-  const triggerSafetyPause = (reason) => {
-    if (isPausedRef.current || safetyPauseTriggeredRef.current) return;
-    safetyPauseTriggeredRef.current = true;
-    
-    pauseStartTimeRef.current = Date.now();
-    setIsPaused(true);
-    setSpeed(0);
-
-    Vibration.vibrate([500, 300, 500, 300, 500]);
-    const message = reason === 'speed' 
-      ? 'Velocidade demasiado elevada detetada. Exercício pausado.' 
-      : 'Paragem prolongada detetada. Exercício pausado.';
-    playAudio(message);
-
-    Alert.alert(
-      '⚠️ Pausa de Segurança',
-      reason === 'speed'
-        ? 'Detetámos uma velocidade muito elevada para corrida (possível transporte veicular).'
-        : 'Detetámos uma paragem prolongada sem movimento.',
-      [
-        {
-          text: 'Cancelar Treino',
-          style: 'destructive',
-          onPress: () => {
-            safetyPauseTriggeredRef.current = false;
-            stopAndCleanupExercise();
-          },
-        },
-        {
-          text: 'Continuar Exercício',
-          onPress: () => {
-            safetyPauseTriggeredRef.current = false;
-            if (pauseStartTimeRef.current) {
-              totalPausedTimeRef.current += (Date.now() - pauseStartTimeRef.current);
-            }
-            lastMovementTimeRef.current = Date.now();
-            setIsPaused(false);
-          },
-        },
-      ],
-      { cancelable: false }
-    );
-  };
-
   const tickExercise = (now, currentDist, currentSpeed) => {
     if (isPausedRef.current || isFinishingRef.current || !startTimeRef.current) return;
-
-    // Ponto 3: Verificação de Paragem Prolongada (> 120s sem alteração significativa na distância)
-    if (!safetyPauseTriggeredRef.current && (now - lastMovementTimeRef.current > 120000)) {
-      triggerSafetyPause('inactivity');
-      return;
-    }
 
     const elapsedMs = now - startTimeRef.current - totalPausedTimeRef.current;
     const currentSec = Math.floor(elapsedMs / 1000);
@@ -536,18 +482,9 @@ export default function App() {
   };
 
   const startExerciseSession = async (type, title, config = {}) => {
-    // --- PONTO 5: Verificação preliminar de GPS e Rede ---
     let { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
-    const gpsEnabled = await Location.hasServicesEnabledAsync();
-    const netState = await Network.getNetworkStateAsync();
-
-    if (fgStatus !== 'granted' || !gpsEnabled || !netState.isConnected) {
-      setNoSignalAlert(true);
-      Alert.alert(
-        'Sinal Indisponível ⚠️',
-        'Não foi possível iniciar o treino por falta de sinal de GPS ou de rede móvel/Wi-Fi.',
-        [{ text: 'Entendido', onPress: () => setNoSignalAlert(false) }]
-      );
+    if (fgStatus !== 'granted') {
+      Alert.alert('Permissão Necessária', 'O acesso ao GPS é necessário para registar o treino.');
       return;
     }
 
@@ -576,8 +513,6 @@ export default function App() {
     esquinaTargetMultiplierRef.current = 1;
     hasGoneBackgroundRef.current = false;
     lastMilhaNoticeStep.current = 0;
-    lastMovementTimeRef.current = Date.now();
-    safetyPauseTriggeredRef.current = false;
 
     setSuddenDeathBlock(1);
     suddenDeathBlockRef.current = 1;
@@ -623,12 +558,6 @@ export default function App() {
       setSpeed(speedKmH);
       speedRef.current = speedKmH;
 
-      // Ponto 3: Deteção de velocidade excessiva em veículo (> 25 km/h)
-      if (parseFloat(speedKmH) > 25) {
-        triggerSafetyPause('speed');
-        return;
-      }
-
       const updatedCadence = calculateDynamicCadence(speedKmH, type);
       setCadence(updatedCadence);
       cadenceRef.current = updatedCadence;
@@ -640,7 +569,6 @@ export default function App() {
           newDist = distanceRef.current + added;
           setDistance(newDist);
           distanceRef.current = newDist;
-          lastMovementTimeRef.current = Date.now(); // Atualiza tempo de último movimento
         }
 
         if (type === 'challenge_1milha') {
@@ -721,6 +649,22 @@ export default function App() {
     }
   };
 
+  const skipCurrentPhase = () => {
+    if (!activeConfig?.phases) return;
+    const currentP = timelinePhases[currentPhaseIndex];
+    if (currentP?.type === 'warmup') {
+      const warmupDuration = activeConfig.phases[0].durationSec;
+      startTimeRef.current = Date.now() - totalPausedTimeRef.current - (warmupDuration * 1000);
+      setSeconds(warmupDuration);
+      secondsRef.current = warmupDuration;
+      updateTimelineProgress(warmupDuration, activeConfig.phases);
+      playAudio('Aquecimento saltado. Comece a correr!');
+    } else if (currentP?.type === 'cooldown') {
+      autoFinishExercise(exerciseType, exerciseTitle, seconds, distance, speed, activeConfig);
+    }
+  };
+
+
   const togglePause = () => {
     if (!isPaused) {
       pauseStartTimeRef.current = Date.now();
@@ -730,24 +674,6 @@ export default function App() {
       if (pauseStartTimeRef.current) totalPausedTimeRef.current += (Date.now() - pauseStartTimeRef.current);
       setIsPaused(false);
     }
-  };
-
-  // --- PONTO 1 & 3: Terminar exercício voluntariamente ou via botão ---
-  const handleUserFinishExercise = () => {
-    Alert.alert(
-      'Terminar Treino',
-      'Deseja terminar e guardar este exercício no histórico?',
-      [
-        { text: 'Continuar a andar/correr', style: 'cancel' },
-        { text: 'Não Guardar', style: 'destructive', onPress: () => stopAndCleanupExercise() },
-        {
-          text: 'Guardar Treino',
-          onPress: () => {
-            autoFinishExercise(exerciseType, exerciseTitle, secondsRef.current, distanceRef.current, speedRef.current, activeConfigRef.current);
-          },
-        },
-      ]
-    );
   };
 
   const cancelExercise = () => {
@@ -893,9 +819,8 @@ export default function App() {
   const dynamicStyles = getStyles(colors);
 
   return (
-    <ImageBackground source={APP_BACKGROUND_IMAGE} style={{ flex: 1 }} resizeMode="cover">
     <SafeAreaView style={dynamicStyles.container}>
-      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      <StatusBar barStyle={currentTheme === 'neon' ? "light-content" : "dark-content"} backgroundColor={colors.COLOR_BG_MAIN} />
 
       <AppModals
         colors={colors}
@@ -933,9 +858,7 @@ export default function App() {
           profile={profile}
           isPaused={isPaused}
           onTogglePause={togglePause}
-          onFinishUser={handleUserFinishExercise}
           onCancel={cancelExercise}
-          noSignalAlert={noSignalAlert}
         />
       ) : (
         <MainScreen
@@ -962,6 +885,5 @@ export default function App() {
         />
       )}
     </SafeAreaView>
-    </ImageBackground>
   );
 }

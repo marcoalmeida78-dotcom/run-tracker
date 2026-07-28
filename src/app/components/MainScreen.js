@@ -1,10 +1,11 @@
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { RUN_PROGRAM_LEVELS } from '../constants/runProgram';
-import WalksMenu from './menus/WalksMenu';
-import RunProgramMenu from './menus/RunProgramMenu';
+import { THEMES } from '../constants/themes';
 import ChallengesMenu from './menus/ChallengesMenu';
-import SettingsMenu from './menus/SettingsMenu';
 import HistoryMenu from './menus/HistoryMenu';
+import RunProgramMenu from './menus/RunProgramMenu';
+import SettingsMenu from './menus/SettingsMenu';
+import WalksMenu from './menus/WalksMenu';
 
 export default function MainScreen({
   colors,
@@ -37,9 +38,20 @@ export default function MainScreen({
 }) {
   const recommendedLevel = RUN_PROGRAM_LEVELS[Math.floor(currentSessionIndex / 3)];
 
+  // Ponto 4: Determinar a cor exata da bola de status (3 -> verde, 2 -> amarelo, <2 -> vermelho)
+  const getStatusDotColor = () => {
+    if (workoutsLast7Days >= 3) return '#22c55e'; // Verde
+    if (workoutsLast7Days === 2) return '#eab308'; // Amarelo
+    return '#ef4444'; // Vermelho
+  };
+
+  // Ponto 7: Título sempre com a cor do tema "vidro branco"
+  const titleColor = THEMES.vidroBranco?.COLOR_TEXT_PRIMARY || '#ffffff';
+
   return (
     <ScrollView contentContainerStyle={styles.scrollContent}>
-      <Text style={styles.appHeaderTitle}>ZERO AOS 5K</Text>
+      {/* Ponto 7: Título com cor fixa de vidro branco */}
+      <Text style={[styles.appHeaderTitle, { color: titleColor }]}>ZERO AOS 5K</Text>
 
       {/* --- CARTÃO DE SESSÃO RECOMENDADA --- */}
       <View style={styles.bentoHeroCardPrimary}>
@@ -48,8 +60,10 @@ export default function MainScreen({
             <Text style={styles.tileNumberLight}>01</Text>
             <Text style={styles.cardHeaderTitleLight}>SESSÃO RECOMENDADA</Text>
           </View>
+          
+          {/* Ponto 4: Bola do topo com lógica de cores fixa nos últimos 7 dias */}
           <TouchableOpacity style={styles.statusDotTouchable} onPress={onShowStatusInfo}>
-            <View style={[styles.statusDotDark, { backgroundColor: workoutsLast7Days > 0 ? colors.COLOR_LIME_ENERGY : colors.COLOR_RED_ACCENT }]} />
+            <View style={[styles.statusDotDark, { backgroundColor: getStatusDotColor() }]} />
           </TouchableOpacity>
         </View>
         <Text style={styles.recommendationTextLight}>
@@ -60,9 +74,7 @@ export default function MainScreen({
         </TouchableOpacity>
       </View>
 
-      {/* --- PAR DE MENUS: CAMINHADAS / 0 AOS 5K ---
-          Este par fica sempre em linha (bentoRow), esteja um menu aberto ou não,
-          para que os cartões não mudem de posição ao expandir. */}
+      {/* --- PAR DE MENUS: CAMINHADAS / 0 AOS 5K --- */}
       <View style={styles.bentoRow}>
         <TouchableOpacity
           style={[styles.bentoTileSage, activeMenu === 'caminhadas' && styles.activeBentoTileHighlight]}
@@ -162,12 +174,24 @@ export default function MainScreen({
           <Text style={styles.batterySectionTitle}>BARRA DE ENERGIA DO PLANO (75 SESSÕES)</Text>
         </View>
         <View style={styles.batteryContainer}>
-          <View style={styles.batterySubGrid}>
-            {Array.from({ length: 75 }).map((_, idx) => (
-              <View key={idx} style={[styles.batterySegmentSlim, { backgroundColor: completedSessions.includes(idx) ? colors.COLOR_LIME_ENERGY : colors.COLOR_DIVIDER }]} />
-            ))}
+          <View style={styles.batteryBody}>
+            <View style={styles.batteryTrack}>
+              {/* Ponto 6: Barra pintada sempre de cor verde limão com opacidade 0.8 */}
+              <View 
+                style={[
+                  styles.batteryFill, 
+                  { 
+                    width: `${(completedSessions.length / 75) * 100}%`,
+                    backgroundColor: '#a3e635', 
+                    opacity: 0.8 
+                  }
+                ]} 
+              />
+            </View>
           </View>
+          <View style={styles.batteryTerminal} />
         </View>
+        <Text style={styles.batteryCountText}>{completedSessions.length} / 75 sessões concluídas</Text>
       </TouchableOpacity>
     </ScrollView>
   );
