@@ -35,6 +35,10 @@ export default function MainScreen({
   onDeleteHistoryItem,
 
   onShowBatteryInfo,
+  skipWarmup,
+  onToggleSkipWarmup,
+  skipCooldown,
+  onToggleSkipCooldown,
 }) {
   const recommendedLevel = RUN_PROGRAM_LEVELS[Math.floor(currentSessionIndex / 3)];
 
@@ -110,6 +114,10 @@ export default function MainScreen({
           activeLevelAccordion={activeLevelAccordion}
           onToggleLevelAccordion={onToggleLevelAccordion}
           onSelectProgramSession={onSelectProgramSession}
+          skipWarmup={skipWarmup}
+          onToggleSkipWarmup={onToggleSkipWarmup}
+          skipCooldown={skipCooldown}
+          onToggleSkipCooldown={onToggleSkipCooldown}
         />
       )}
 

@@ -94,17 +94,24 @@ export const calculate1MileRunVo2Max = (timeSec, profile) => {
 };
 
 // --- GERAÇÃO DA TIMELINE DE UMA SESSÃO DO PROGRAMA 0 AOS 5K ---
-export const generateTimeline = (sessionIdx) => {
+export const generateTimeline = (sessionIdx, skipWarmup = false, skipCooldown = false) => {
   const lvlIdx = Math.floor(sessionIdx / 3);
   const lvl = RUN_PROGRAM_LEVELS[lvlIdx];
-  const phases = [{ id: 0, label: 'AQUECIMENTO', durationSec: 300, type: 'warmup' }];
-  let idCounter = 1;
+  const phases = [];
+  let idCounter = 0;
+  if (!skipWarmup) {
+    phases.push({ id: idCounter++, label: 'AQUECIMENTO', durationSec: 300, type: 'warmup' });
+  }
   for (let i = 0; i < lvl.repeats; i++) {
     phases.push({ id: idCounter++, label: `CORRIDA ${i + 1}`, durationSec: lvl.runSec, type: 'run' });
-    if (lvl.walkSec > 0) {
+    // Não junta caminhada depois da última corrida: a sessão deve terminar sempre numa secção
+    // de corrida, antes do arrefecimento.
+    if (lvl.walkSec > 0 && i < lvl.repeats - 1) {
       phases.push({ id: idCounter++, label: `CAMINHADA ${i + 1}`, durationSec: lvl.walkSec, type: 'walk' });
     }
   }
-  phases.push({ id: idCounter++, label: 'ARREFECIMENTO', durationSec: 300, type: 'cooldown' });
+  if (!skipCooldown) {
+    phases.push({ id: idCounter++, label: 'ARREFECIMENTO', durationSec: 300, type: 'cooldown' });
+  }
   return phases;
 };

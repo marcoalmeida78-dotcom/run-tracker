@@ -54,6 +54,8 @@ export default function App() {
   const [history, setHistory] = useState([]);
   const [currentSessionIndex, setCurrentSessionIndex] = useState(0); 
   const [completedSessions, setCompletedSessions] = useState([]); 
+  const [skipWarmup, setSkipWarmup] = useState(false);
+  const [skipCooldown, setSkipCooldown] = useState(false);
 
   const [isExercising, setIsExercising] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -321,7 +323,8 @@ export default function App() {
 
   const playAudio = async (text) => {
     try {
-      Speech.stop();
+      // Nota: sem Speech.stop() aqui de propósito — cada comando de áudio fica em fila
+      // e toca até ao fim antes do próximo começar, em vez de ser interrompido.
       const voices = await Speech.getAvailableVoicesAsync();
       const ptPtVoice = voices.find(v => v.language && (v.language.toLowerCase() === 'pt-pt' || v.language.toLowerCase() === 'pt_pt'));
       const options = { language: 'pt-PT' };
@@ -418,19 +421,37 @@ export default function App() {
   };
 
   const launchProgramSession = (sessionIdx, isUpdatingProgression) => {
-    const phases = generateTimeline(sessionIdx);
-    const totalSec = phases.reduce((acc, p) => acc + p.durationSec, 0);
-    setTimelinePhases(phases);
-    setCurrentPhaseIndex(0);
-    currentPhaseIndexRef.current = 0;
-    setPhaseTimeLeft(phases[0].durationSec);
+    const startNow = () => {
+      const phases = generateTimeline(sessionIdx, skipWarmup, skipCooldown);
+      const totalSec = phases.reduce((acc, p) => acc + p.durationSec, 0);
+      setTimelinePhases(phases);
+      setCurrentPhaseIndex(0);
+      currentPhaseIndexRef.current = 0;
+      setPhaseTimeLeft(phases[0].durationSec);
 
-    const lvl = RUN_PROGRAM_LEVELS[Math.floor(sessionIdx / 3)];
-    startExerciseSession(
-      'run_program',
-      `Corrida: ${lvl.title} - ${lvl.sessions[sessionIdx % 3]}`,
-      { targetTimeSec: totalSec, phases, sessionIndex: sessionIdx, isProgression: isUpdatingProgression }
-    );
+      const lvl = RUN_PROGRAM_LEVELS[Math.floor(sessionIdx / 3)];
+      startExerciseSession(
+        'run_program',
+        `Corrida: ${lvl.title} - ${lvl.sessions[sessionIdx % 3]}`,
+        { targetTimeSec: totalSec, phases, sessionIndex: sessionIdx, isProgression: isUpdatingProgression }
+      );
+    };
+
+    if (skipWarmup || skipCooldown) {
+      const partes = [];
+      if (skipWarmup) partes.push('o aquecimento');
+      if (skipCooldown) partes.push('o arrefecimento');
+      Alert.alert(
+        '⚠️ Aviso',
+        `Esta sessão vai começar sem ${partes.join(' e sem ')}. Isto aumenta o risco de lesão. Queres continuar?`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Continuar assim', onPress: startNow },
+        ]
+      );
+    } else {
+      startNow();
+    }
   };
 
   // --- NOVO: Função para ativar a Pausa de Segurança (Ponto 3) ---
@@ -962,6 +983,10 @@ export default function App() {
           history={history}
           onDeleteHistoryItem={handleDeleteHistoryItem}
           onShowBatteryInfo={() => setShowBatteryInfoModal(true)}
+          skipWarmup={skipWarmup}
+          onToggleSkipWarmup={() => setSkipWarmup(prev => !prev)}
+          skipCooldown={skipCooldown}
+          onToggleSkipCooldown={() => setSkipCooldown(prev => !prev)}
         />
       )}
     </SafeAreaView>

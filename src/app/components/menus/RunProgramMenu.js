@@ -9,6 +9,10 @@ export default function RunProgramMenu({
   activeLevelAccordion,
   onToggleLevelAccordion,
   onSelectProgramSession,
+  skipWarmup,
+  onToggleSkipWarmup,
+  skipCooldown,
+  onToggleSkipCooldown,
 }) {
   return (
     <View style={styles.accordionBodyGrid}>
@@ -16,6 +20,25 @@ export default function RunProgramMenu({
         <Text style={styles.submenuHeaderText}>SUBMENU: 03 - 0 AOS 5K</Text>
         <TouchableOpacity onPress={onClose}>
           <Text style={styles.submenuCloseText}>▲ FECHAR PLANO</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.skipOptionsRow}>
+        <TouchableOpacity
+          style={[styles.skipOptionBtn, skipWarmup && styles.skipOptionBtnActive]}
+          onPress={onToggleSkipWarmup}
+        >
+          <Text style={[styles.skipOptionText, skipWarmup && styles.skipOptionTextActive]}>
+            {skipWarmup ? '✓ ' : ''}Saltar aquecimento
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.skipOptionBtn, skipCooldown && styles.skipOptionBtnActive, { marginRight: 0 }]}
+          onPress={onToggleSkipCooldown}
+        >
+          <Text style={[styles.skipOptionText, skipCooldown && styles.skipOptionTextActive]}>
+            {skipCooldown ? '✓ ' : ''}Saltar arrefecimento
+          </Text>
         </TouchableOpacity>
       </View>
 
