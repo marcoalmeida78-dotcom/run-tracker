@@ -20,6 +20,7 @@ export default function ActiveExerciseScreen({
   speed,
   cadence,
   profile,
+  activeConfig,
   isPaused,
   onTogglePause,
   onFinishUser,

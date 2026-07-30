@@ -25,10 +25,19 @@ export const calculateDynamicCadence = (currentSpeedKmH, type) => {
   const spd = parseFloat(currentSpeedKmH) || 0;
   if (isWalkingActivity(type)) {
     if (spd <= 0) return 105;
-    return Math.max(85, Math.min(170, Math.round(95 + (spd * 8))));
+    // Modelo baseado no comprimento médio do passo (~0.70 m) em vez de uma
+    // fórmula linear arbitrária. cadência (passos/min) = distância por minuto / comprimento do passo.
+    // Ex: a 5 km/h -> (5000/60)/0.70 ≈ 119 SPM, próximo do valor real observado (115-118 passos/min).
+    const stepLengthM = 0.70;
+    const metersPerMin = spd * (1000 / 60);
+    const spm = metersPerMin / stepLengthM;
+    return Math.max(70, Math.min(140, Math.round(spm)));
   } else {
     if (spd <= 0) return 160;
-    return Math.max(140, Math.min(200, Math.round(140 + (spd * 5))));
+    // Corrida: a cadência real varia pouco com a velocidade (tipicamente 150-185 SPM);
+    // o que aumenta com a velocidade é sobretudo o comprimento da passada, não a cadência.
+    const spm = spd <= 6 ? 150 : 150 + (spd - 6) * 4;
+    return Math.max(140, Math.min(190, Math.round(spm)));
   }
 };
 

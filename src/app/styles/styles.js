@@ -2,6 +2,9 @@ import { StyleSheet } from 'react-native';
 
 export const getStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
+  // "Nevoeiro" sobre a imagem de fundo: aumenta o valor de opacity (0 a 1) para esconder mais a imagem,
+  // ou diminui para deixá-la mais visível. Podes também trocar a cor (ex: '#ffffff' para um nevoeiro claro).
+  backgroundFogOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000000', opacity: 0.45 },
   scrollContent: { padding: 16, paddingTop: 28, paddingBottom: 40 },
   activeExerciseScroll: { padding: 20, paddingTop: 36, paddingBottom: 40 },
   appHeaderTitle: { fontSize: 26, fontWeight: '900', color: colors.COLOR_PRIMARY, textAlign: 'center', marginBottom: 20, marginTop: 16, letterSpacing: 2, textShadowColor: 'rgba(0,0,0,0.25)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },

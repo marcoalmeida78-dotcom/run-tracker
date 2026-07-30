@@ -14,6 +14,7 @@ import {
   SafeAreaView,
   StatusBar,
   Vibration,
+  View,
 } from 'react-native';
 
 import { THEMES } from './constants/themes';
@@ -216,7 +217,7 @@ export default function App() {
   const promptBatteryOptimizationIfNeeded = async () => {
     if (Platform.OS !== 'android') return;
     try {
-      const alreadyWarned = await AsyncStorage.setItem('@battery_optimization_warned');
+      const alreadyWarned = await AsyncStorage.getItem('@battery_optimization_warned');
       if (!alreadyWarned) {
         setShowBatteryOptimizationModal(true);
       }
@@ -894,6 +895,7 @@ export default function App() {
 
   return (
     <ImageBackground source={APP_BACKGROUND_IMAGE} style={{ flex: 1 }} resizeMode="cover">
+    <View style={dynamicStyles.backgroundFogOverlay} pointerEvents="none" />
     <SafeAreaView style={dynamicStyles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
@@ -931,6 +933,7 @@ export default function App() {
           speed={speed}
           cadence={cadence}
           profile={profile}
+          activeConfig={activeConfig}
           isPaused={isPaused}
           onTogglePause={togglePause}
           onFinishUser={handleUserFinishExercise}

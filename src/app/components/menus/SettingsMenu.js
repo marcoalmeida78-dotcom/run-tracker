@@ -65,6 +65,27 @@ export default function SettingsMenu({
         onChangeText={(val) => onSaveProfile({ ...profile, age: val })}
       />
 
+      <Text style={styles.inputLabel}>Género:</Text>
+      <View style={styles.themeSelectorContainer}>
+        {[
+          { key: 'masculino', label: 'Masculino' },
+          { key: 'feminino', label: 'Feminino' },
+        ].map((genderOption) => {
+          const isSelected = (profile.gender || 'masculino') === genderOption.key;
+          return (
+            <TouchableOpacity
+              key={genderOption.key}
+              style={[styles.themeBtn, isSelected && styles.themeBtnActive]}
+              onPress={() => onSaveProfile({ ...profile, gender: genderOption.key })}
+            >
+              <Text style={[styles.themeBtnText, isSelected && styles.themeBtnTextActive]}>
+                {genderOption.label} {isSelected ? '✓' : ''}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       <View style={styles.divider} />
       <TouchableOpacity style={styles.dangerBtn} onPress={onResetAllData}>
         <Text style={styles.dangerBtnText}>REINICIAR TODA A APLICAÇÃO</Text>
