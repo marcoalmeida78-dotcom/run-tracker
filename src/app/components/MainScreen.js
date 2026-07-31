@@ -197,15 +197,17 @@ export default function MainScreen({
         </View>
         <Text style={styles.batteryCountText}>{completedSessions.length} / 75 sessões concluídas</Text>
       </TouchableOpacity>
-      {/* Adiciona este botão juntamente com os teus outros botões do menu principal */}
-<TouchableOpacity 
-  style={[styles.menuButton, { backgroundColor: themeColors.cardBackground }]} 
-  onPress={() => setActiveModal('health')}
->
-  <Text style={[styles.menuButtonText, { color: themeColors.text }]}>
-    🏥 Saúde & Metabolismo
-  </Text>
-</TouchableOpacity>
+{/* CARD DO MENU SAÚDE & METABOLISMO */}
+      <TouchableOpacity
+        style={[styles.bentoHeroBottom, activeMenu === 'saude' && styles.activeBentoTileHighlight]}
+        onPress={() => setActiveModal('health')}
+      >
+        <View style={styles.cardHeaderRow}>
+          <Text style={styles.cardHeaderTitleDark}>🏥 SAÚDE & METABOLISMO</Text>
+          <Text style={styles.accordionIcon}>▼ ABRIR</Text>
+        </View>
+        <Text style={styles.recommendationTextDark}>TMB, Balança Xiaomi e Google Fit</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
