@@ -55,12 +55,13 @@
           "microphonePermission": false
         }
       ],
-      //saude
       [
         "react-native-ble-plx",
         {
           "isBackgroundEnabled": false,
-          "modes": ["central"]
+          "modes": [
+            "central"
+          ]
         }
       ],
       [
@@ -69,9 +70,17 @@
           "rationale": "A app necessita de ler os seus treinos e calorias para evitar contagem dupla com a app de corrida."
         }
       ],
-      //fim saude
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ],
       "react-native-ble-plx",
-      "react-native-health-connect"
+      "react-native-health-connect",
+      "expo-build-properties"
     ],
     "extra": {
       "eas": {
