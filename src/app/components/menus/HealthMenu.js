@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, PermissionsAndroid, Platform, Text, TouchableOpacity, View } from 'react-native';
 import { BleManager } from 'react-native-ble-plx';
 import {
   aggregateRecord,
@@ -10,7 +10,6 @@ import {
 
 const bleManager = new BleManager();
 
-// Definição clara das permissões necessárias para o Google Fit / Health Connect
 const HEALTH_PERMISSIONS = [
   { accessType: 'read', recordType: 'ActiveCaloriesBurned' },
   { accessType: 'read', recordType: 'TotalCaloriesBurned' },
@@ -20,25 +19,16 @@ export default function HealthMenu({ colors, onClose }) {
   const [activeCalories, setActiveCalories] = useState(0);
   const [isScanningScale, setIsScanningScale] = useState(false);
   const [scaleData, setScaleData] = useState(null);
-  const [hasPermission, setHasPermission] = useState(false);
 
-  // --------------------------------------------------------------------------
-  // 1. INICIALIZAÇÃO E PEDIDO DE PERMISSÕES PERMANENTES
-  // --------------------------------------------------------------------------
   useEffect(() => {
     setupHealthConnect();
   }, []);
 
   const setupHealthConnect = async () => {
     try {
-      // 1. Inicializa a ligação ao Health Connect
       const isInitialized = await initialize();
-      if (!isInitialized) {
-        console.log('Health Connect não está disponível neste dispositivo.');
-        return;
-      }
+      if (!isInitialized) return;
 
-      // 2. Verifica se as permissões já foram concedidas anteriormente
       const currentPermissions = await getGrantedPermissions();
       const alreadyGranted = HEALTH_PERMISSIONS.every((req) =>
         currentPermissions.some(
@@ -48,16 +38,11 @@ export default function HealthMenu({ colors, onClose }) {
       );
 
       if (alreadyGranted) {
-        setHasPermission(true);
         await fetchActiveCalories();
       } else {
-        // 3. Se ainda não foram concedidas, solicita ao sistema (Pop-up do Android)
         const granted = await requestPermission(HEALTH_PERMISSIONS);
         if (granted && granted.length > 0) {
-          setHasPermission(true);
           await fetchActiveCalories();
-        } else {
-          console.log('Permissão do Health Connect recusada pelo utilizador.');
         }
       }
     } catch (error) {
@@ -65,9 +50,6 @@ export default function HealthMenu({ colors, onClose }) {
     }
   };
 
-  // --------------------------------------------------------------------------
-  // 2. LEITURA DE CALORIAS ATIVAS DO DIA (00:00 até Agora)
-  // --------------------------------------------------------------------------
   const fetchActiveCalories = async () => {
     try {
       const now = new Date();
@@ -79,7 +61,6 @@ export default function HealthMenu({ colors, onClose }) {
         endTime: now.toISOString(),
       };
 
-      // Tentar procurar ActiveCaloriesBurned (ex: minutos ativos / corridas)
       const activeResult = await aggregateRecord({
         recordType: 'ActiveCaloriesBurned',
         timeRangeFilter,
@@ -88,7 +69,6 @@ export default function HealthMenu({ colors, onClose }) {
       if (activeResult?.ENERGY_TOTAL?.inKilocalories) {
         setActiveCalories(Math.round(activeResult.ENERGY_TOTAL.inKilocalories));
       } else {
-        // Fallback: TotalCaloriesBurned caso o Fit reporte o acumulado do dia
         const totalResult = await aggregateRecord({
           recordType: 'TotalCaloriesBurned',
           timeRangeFilter,
@@ -99,25 +79,64 @@ export default function HealthMenu({ colors, onClose }) {
         }
       }
     } catch (error) {
-      console.error('Erro ao ler calorias do Health Connect:', error);
+      console.error('Erro ao ler calorias:', error);
     }
   };
 
   // --------------------------------------------------------------------------
-  // 3. LEITURA DA BALANÇA XIAOMI (BLE)
+  // PEDIDO DE PERMISSÕES DE BLUETOOTH (ANDROID)
   // --------------------------------------------------------------------------
-  const handleScanXiaomiScale = () => {
+  const requestBluetoothPermissions = async () => {
+    if (Platform.OS === 'android') {
+      if (Platform.Version >= 31) {
+        const granted = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        ]);
+        return (
+          granted['android.permission.BLUETOOTH_SCAN'] === PermissionsAndroid.RESULTS.GRANTED &&
+          granted['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED
+        );
+      } else {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+        );
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+      }
+    }
+    return true;
+  };
+
+  // --------------------------------------------------------------------------
+  // CONEXÃO COM A BALANÇA XIAOMI (BLE)
+  // --------------------------------------------------------------------------
+  const handleScanXiaomiScale = async () => {
     if (isScanningScale) return;
 
+    // 1. Pedir permissões do SO
+    const hasPermission = await requestBluetoothPermissions();
+    if (!hasPermission) {
+      Alert.alert('Permissão Negada', 'A app precisa de permissão de Bluetooth para procurar a balança.');
+      return;
+    }
+
+    // 2. Verificar se o Bluetooth está ativo
+    const state = await bleManager.state();
+    if (state !== 'PoweredOn') {
+      Alert.alert('Bluetooth Desligado', 'Por favor, liga o Bluetooth do telemóvel e tenta novamente.');
+      return;
+    }
+
     setIsScanningScale(true);
-    Alert.alert('Balança Xiaomi', 'A procurar balança... Suba para a balança agora.');
+    Alert.alert('Balança Xiaomi', 'A procurar... Suba para a balança agora para ativar a transmissão.');
 
     bleManager.startDeviceScan(null, null, (error, device) => {
       if (error) {
         console.error('Erro no scan BLE:', error);
         setIsScanningScale(false);
         bleManager.stopDeviceScan();
-        Alert.alert('Erro BLE', 'Não foi possível ligar ao Bluetooth.');
+        Alert.alert('Erro Bluetooth', 'Falha ao iniciar a pesquisa de dispositivos.');
         return;
       }
 
@@ -125,7 +144,7 @@ export default function HealthMenu({ colors, onClose }) {
         bleManager.stopDeviceScan();
         setIsScanningScale(false);
 
-        Alert.alert('Balança Detetada', `Balança ligada: ${device.name || 'Xiaomi Scale'}`);
+        Alert.alert('Balança Detetada', `Ligado com sucesso a: ${device.name || 'Xiaomi Scale'}`);
         setScaleData({ name: device.name, status: 'Conetado' });
       }
     });
