@@ -1,5 +1,14 @@
 import { Modal, Text, TouchableOpacity, View } from 'react-native';
 
+// ============================================================================
+// INÍCIO - ADIÇÃO: MENU SAÚDE E BALANÇA (DESCOMENTAR / APAGAR SE NECESSÁRIO)
+// ============================================================================
+import HealthMenu from '../menus/HealthMenu';
+import XiaomiScaleMenu from '../menus/XiaomiScaleMenu';
+// ============================================================================
+// FIM - ADIÇÃO: IMPORTS SAÚDE
+// ============================================================================
+
 // Agrupa todos os modais da aplicação num só sítio.
 // Cada modal é controlado por uma prop "visible*" vinda do componente principal.
 export default function AppModals({
@@ -22,6 +31,15 @@ export default function AppModals({
   showEsquinaModal,
   onContinueEsquinaChallenge,
   onFinishEsquinaChallenge,
+
+  // ============================================================================
+  // INÍCIO - ADIÇÃO: PROPS DOS MODAIS DE SAÚDE E BALANÇA
+  // ============================================================================
+  activeModal,
+  setActiveModal,
+  // ============================================================================
+  // FIM - ADIÇÃO: PROPS SAÚDE
+  // ============================================================================
 }) {
   return (
     <>
@@ -96,6 +114,39 @@ export default function AppModals({
           </View>
         </View>
       </Modal>
+
+      {/* ============================================================================ */}
+      {/* INÍCIO - ADIÇÃO: MODAIS DO MENU SAÚDE E BALANÇA XIAOMI                        */}
+      {/* (SE QUISERES REMOVER O MENU SAÚDE, BASTA APAGAR ESTES DOIS BLOCOS DE MODAL) */}
+      {/* ============================================================================ */}
+      {activeModal === 'health' && (
+        <Modal 
+          visible={true} 
+          animationType="slide" 
+          onRequestClose={() => setActiveModal && setActiveModal(null)}
+        >
+          <HealthMenu 
+            colors={colors} 
+            onNavigateToScale={() => setActiveModal && setActiveModal('xiaomi_scale')} 
+          />
+        </Modal>
+      )}
+
+      {activeModal === 'xiaomi_scale' && (
+        <Modal 
+          visible={true} 
+          animationType="slide" 
+          onRequestClose={() => setActiveModal && setActiveModal('health')}
+        >
+          <XiaomiScaleMenu 
+            colors={colors} 
+            onBack={() => setActiveModal && setActiveModal('health')} 
+          />
+        </Modal>
+      )}
+      {/* ============================================================================ */}
+      {/* FIM - ADIÇÃO: MODAIS DO MENU SAÚDE                                            */}
+      {/* ============================================================================ */}
     </>
   );
 }

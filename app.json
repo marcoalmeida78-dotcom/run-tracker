@@ -1,19 +1,15 @@
-
 {
   "cli": {
     "appVersionSource": "local"
   },
   "expo": {
-    
     "name": "Zero aos 5K",
     "slug": "zero-aos-5k",
     "version": "1.0.0",
     "icon": "assets/icon.png",
-    
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "ios": {
-      
       "supportsTablet": true,
       "bundleIdentifier": "com.marcoalmeida.zeroaos5k",
       "infoPlist": {
@@ -58,7 +54,24 @@
         {
           "microphonePermission": false
         }
-      ]
+      ],
+      //saude
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "modes": ["central"]
+        }
+      ],
+      [
+        "react-native-health-connect",
+        {
+          "rationale": "A app necessita de ler os seus treinos e calorias para evitar contagem dupla com a app de corrida."
+        }
+      ],
+      //fim saude
+      "react-native-ble-plx",
+      "react-native-health-connect"
     ],
     "extra": {
       "eas": {

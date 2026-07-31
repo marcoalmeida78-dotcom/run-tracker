@@ -10,15 +10,30 @@ function OpacitySlider({ styles, value, onChange }) {
   // ler diretamente de useState (isso ficaria "preso" no valor do 1º render, que é
   // sempre 0 antes do onLayout correr) — tem de ler sempre de refs, cujo .current
   // é sempre o valor mais recente, mesmo dentro de um closure criado há muito tempo.
+  const trackRef = useRef(null);
   const trackWidthRef = useRef(0);
+  const trackPageXRef = useRef(0);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
-  const updateFromLocalX = (x) => {
+  // Usa coordenadas absolutas do ecrã (pageX) em vez de locationX. O locationX é
+  // relativo ao elemento exato que é tocado — se tocares em cima da bola (que é uma
+  // vista mais pequena por cima da barra), o valor passa a ser relativo À BOLA e não
+  // à barra toda, o que fazia "saltar" sempre para perto do zero. Com pageX + a posição
+  // medida da barra, o cálculo é sempre o mesmo, seja onde for que toques.
+  const updateFromPageX = (pageX) => {
     const width = trackWidthRef.current;
     if (width <= 0) return;
-    const ratio = Math.max(0, Math.min(1, x / width));
+    const localX = pageX - trackPageXRef.current;
+    const ratio = Math.max(0, Math.min(1, localX / width));
     onChangeRef.current(ratio);
+  };
+
+  const measureTrack = () => {
+    trackRef.current?.measure((x, y, width, height, pageX) => {
+      trackWidthRef.current = width;
+      trackPageXRef.current = pageX;
+    });
   };
 
   const panResponder = useRef(
@@ -29,21 +44,22 @@ function OpacitySlider({ styles, value, onChange }) {
       // para não impedir o scroll vertical normal do menu de Definições.
       onMoveShouldSetPanResponder: (evt, gestureState) => Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
       onMoveShouldSetPanResponderCapture: (evt, gestureState) => Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
-      onPanResponderGrant: (evt) => updateFromLocalX(evt.nativeEvent.locationX),
-      onPanResponderMove: (evt) => updateFromLocalX(evt.nativeEvent.locationX),
+      onPanResponderGrant: (evt, gestureState) => updateFromPageX(gestureState.x0),
+      onPanResponderMove: (evt, gestureState) => updateFromPageX(gestureState.moveX),
     })
   ).current;
 
   return (
     <View
+      ref={trackRef}
       style={styles.sliderTrackWrapper}
-      onLayout={(e) => { trackWidthRef.current = e.nativeEvent.layout.width; }}
+      onLayout={measureTrack}
       {...panResponder.panHandlers}
     >
-      <View style={styles.sliderTrackBg}>
+      <View style={styles.sliderTrackBg} pointerEvents="none">
         <View style={[styles.sliderTrackFill, { width: `${value * 100}%` }]} />
       </View>
-      <View style={[styles.sliderThumb, { left: `${value * 100}%` }]} />
+      <View style={[styles.sliderThumb, { left: `${value * 100}%` }]} pointerEvents="none" />
     </View>
   );
 }

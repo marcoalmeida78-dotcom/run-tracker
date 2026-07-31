@@ -197,6 +197,15 @@ export default function MainScreen({
         </View>
         <Text style={styles.batteryCountText}>{completedSessions.length} / 75 sessões concluídas</Text>
       </TouchableOpacity>
+      {/* Adiciona este botão juntamente com os teus outros botões do menu principal */}
+<TouchableOpacity 
+  style={[styles.menuButton, { backgroundColor: themeColors.cardBackground }]} 
+  onPress={() => setActiveModal('health')}
+>
+  <Text style={[styles.menuButtonText, { color: themeColors.text }]}>
+    🏥 Saúde & Metabolismo
+  </Text>
+</TouchableOpacity>
     </ScrollView>
   );
 }
