@@ -1,92 +1,186 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { calculateBMR, fetchRealGoogleFitSessions, deduplicateAndCalculateTotalCalories } from '../../utils/healthCalculations';
+import React, { useEffect, useState } from 'react';
+import { Alert, Text, TouchableOpacity, View } from 'react-native';
+import { BleManager } from 'react-native-ble-plx';
+import {
+  aggregateRecord,
+  getGrantedPermissions,
+  initialize,
+  requestPermission,
+} from 'react-native-health-connect';
 
-export default function HealthMenu({ onNavigateToScale, colors }) {
-  const [bmr, setBmr] = useState(0);
+const bleManager = new BleManager();
+
+// Definição clara das permissões necessárias para o Google Fit / Health Connect
+const HEALTH_PERMISSIONS = [
+  { accessType: 'read', recordType: 'ActiveCaloriesBurned' },
+  { accessType: 'read', recordType: 'TotalCaloriesBurned' },
+];
+
+export default function HealthMenu({ colors, onClose }) {
   const [activeCalories, setActiveCalories] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [isScanningScale, setIsScanningScale] = useState(false);
+  const [scaleData, setScaleData] = useState(null);
+  const [hasPermission, setHasPermission] = useState(false);
 
+  // --------------------------------------------------------------------------
+  // 1. INICIALIZAÇÃO E PEDIDO DE PERMISSÕES PERMANENTES
+  // --------------------------------------------------------------------------
   useEffect(() => {
-    loadHealthData();
+    setupHealthConnect();
   }, []);
 
-  const loadHealthData = async () => {
-    setLoading(true);
+  const setupHealthConnect = async () => {
     try {
-      // 1. Carregar perfil do utilizador
-      const savedSettings = await AsyncStorage.getItem('@user_settings');
-      let weight = 70, height = 175, age = 30, gender = 'male';
-
-      if (savedSettings) {
-        const parsed = JSON.parse(savedSettings);
-        weight = parsed.weight || weight;
-        height = parsed.height || height;
-        age = parsed.age || age;
-        gender = parsed.gender || gender;
+      // 1. Inicializa a ligação ao Health Connect
+      const isInitialized = await initialize();
+      if (!isInitialized) {
+        console.log('Health Connect não está disponível neste dispositivo.');
+        return;
       }
 
-      const calculatedBMR = calculateBMR(weight, height, age, gender);
-      setBmr(calculatedBMR);
+      // 2. Verifica se as permissões já foram concedidas anteriormente
+      const currentPermissions = await getGrantedPermissions();
+      const alreadyGranted = HEALTH_PERMISSIONS.every((req) =>
+        currentPermissions.some(
+          (granted) =>
+            granted.recordType === req.recordType && granted.accessType === req.accessType
+        )
+      );
 
-      // 2. Carregar treinos da própria App de Corrida
-      const savedHistory = await AsyncStorage.getItem('@run_history');
-      const appRuns = savedHistory ? JSON.parse(savedHistory) : [];
-
-      // 3. Obter treinos REAIS do Google Fit / Health Connect
-      const googleFitData = await fetchRealGoogleFitSessions();
-
-      // 4. Aplicar desduplicação e subtração de calorias basais
-      const netActive = deduplicateAndCalculateTotalCalories(googleFitData, appRuns, calculatedBMR);
-      setActiveCalories(netActive);
-
-    } catch (e) {
-      console.error('Erro ao calcular métricas reais de saúde:', e);
-    } finally {
-      setLoading(false);
+      if (alreadyGranted) {
+        setHasPermission(true);
+        await fetchActiveCalories();
+      } else {
+        // 3. Se ainda não foram concedidas, solicita ao sistema (Pop-up do Android)
+        const granted = await requestPermission(HEALTH_PERMISSIONS);
+        if (granted && granted.length > 0) {
+          setHasPermission(true);
+          await fetchActiveCalories();
+        } else {
+          console.log('Permissão do Health Connect recusada pelo utilizador.');
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao configurar o Health Connect:', error);
     }
   };
 
+  // --------------------------------------------------------------------------
+  // 2. LEITURA DE CALORIAS ATIVAS DO DIA (00:00 até Agora)
+  // --------------------------------------------------------------------------
+  const fetchActiveCalories = async () => {
+    try {
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+
+      const timeRangeFilter = {
+        operator: 'between',
+        startTime: startOfDay.toISOString(),
+        endTime: now.toISOString(),
+      };
+
+      // Tentar procurar ActiveCaloriesBurned (ex: minutos ativos / corridas)
+      const activeResult = await aggregateRecord({
+        recordType: 'ActiveCaloriesBurned',
+        timeRangeFilter,
+      });
+
+      if (activeResult?.ENERGY_TOTAL?.inKilocalories) {
+        setActiveCalories(Math.round(activeResult.ENERGY_TOTAL.inKilocalories));
+      } else {
+        // Fallback: TotalCaloriesBurned caso o Fit reporte o acumulado do dia
+        const totalResult = await aggregateRecord({
+          recordType: 'TotalCaloriesBurned',
+          timeRangeFilter,
+        });
+
+        if (totalResult?.ENERGY_TOTAL?.inKilocalories) {
+          setActiveCalories(Math.round(totalResult.ENERGY_TOTAL.inKilocalories));
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao ler calorias do Health Connect:', error);
+    }
+  };
+
+  // --------------------------------------------------------------------------
+  // 3. LEITURA DA BALANÇA XIAOMI (BLE)
+  // --------------------------------------------------------------------------
+  const handleScanXiaomiScale = () => {
+    if (isScanningScale) return;
+
+    setIsScanningScale(true);
+    Alert.alert('Balança Xiaomi', 'A procurar balança... Suba para a balança agora.');
+
+    bleManager.startDeviceScan(null, null, (error, device) => {
+      if (error) {
+        console.error('Erro no scan BLE:', error);
+        setIsScanningScale(false);
+        bleManager.stopDeviceScan();
+        Alert.alert('Erro BLE', 'Não foi possível ligar ao Bluetooth.');
+        return;
+      }
+
+      if (device && (device.name?.includes('MI Scale') || device.name?.includes('MIBCO') || device.name?.includes('MIBFS'))) {
+        bleManager.stopDeviceScan();
+        setIsScanningScale(false);
+
+        Alert.alert('Balança Detetada', `Balança ligada: ${device.name || 'Xiaomi Scale'}`);
+        setScaleData({ name: device.name, status: 'Conetado' });
+      }
+    });
+
+    setTimeout(() => {
+      if (isScanningScale) {
+        bleManager.stopDeviceScan();
+        setIsScanningScale(false);
+      }
+    }, 12000);
+  };
+
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors?.background || '#121212' }]}>
-      <Text style={[styles.title, { color: colors?.text || '#FFF' }]}>Saúde & Metabolismo 🏥</Text>
+    <View style={{ backgroundColor: colors?.cardBackground || '#1e293b', padding: 16, borderRadius: 12, marginVertical: 8 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: 'bold' }}>🏥 SAÚDE & METABOLISMO</Text>
+        {onClose && (
+          <TouchableOpacity onPress={onClose}>
+            <Text style={{ color: '#94a3b8', fontSize: 14 }}>▲ FECHAR</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
-      {loading ? (
-        <ActivityIndicator size="large" color="#00E676" style={{ marginVertical: 30 }} />
-      ) : (
-        <View style={[styles.card, { backgroundColor: colors?.cardBackground || '#1E1E1E' }]}>
-          <Text style={styles.cardTitle}>🔥 Taxa Metabólica Basal (TMB)</Text>
-          <Text style={styles.metricValue}>{bmr} <Text style={styles.unit}>kcal/dia</Text></Text>
-          <Text style={styles.subtext}>Fórmula Mifflin-St Jeor (Energia em repouso).</Text>
+      {/* PAINEL DE CALORIAS GOOGLE FIT */}
+      <View style={{ backgroundColor: '#0f172a', padding: 12, borderRadius: 8, marginBottom: 12 }}>
+        <Text style={{ color: '#94a3b8', fontSize: 12 }}>CALORIAS DO GOOGLE FIT (HOJE)</Text>
+        <Text style={{ color: '#38bdf8', fontSize: 24, fontWeight: 'bold', marginTop: 4 }}>
+          {activeCalories} <Text style={{ fontSize: 14, color: '#e2e8f0' }}>kcal</Text>
+        </Text>
+        <TouchableOpacity onPress={fetchActiveCalories} style={{ marginTop: 8 }}>
+          <Text style={{ color: '#a3e635', fontSize: 12 }}>🔄 Atualizar dados do Fit</Text>
+        </TouchableOpacity>
+      </View>
 
-          <View style={styles.divider} />
-
-          <Text style={styles.cardTitle}>🏃‍♂️ Calorias Ativas Líquidas (Hoje)</Text>
-          <Text style={styles.metricValue}>{activeCalories} <Text style={styles.unit}>kcal</Text></Text>
-          <Text style={styles.subtext}>Obtidas via Google Fit + App de corrida sem dupla contagem.</Text>
-        </View>
-      )}
-
-      <TouchableOpacity 
-        style={[styles.button, { backgroundColor: colors?.accent || '#2979FF' }]} 
-        onPress={onNavigateToScale}
+      {/* BOTÃO DA BALANÇA XIAOMI */}
+      <TouchableOpacity
+        onPress={handleScanXiaomiScale}
+        disabled={isScanningScale}
+        style={{
+          backgroundColor: isScanningScale ? '#475569' : '#3b82f6',
+          padding: 12,
+          borderRadius: 8,
+          alignItems: 'center',
+        }}
       >
-        <Text style={styles.buttonText}>⚖️ Ler Balança Xiaomi Body Composition 2</Text>
+        <Text style={{ color: '#ffffff', fontWeight: 'bold' }}>
+          {isScanningScale ? '⏳ A PROCURAR BALANÇA...' : '⚖️ LER BALANÇA XIAOMI'}
+        </Text>
       </TouchableOpacity>
-    </ScrollView>
+
+      {scaleData && (
+        <Text style={{ color: '#4ade80', fontSize: 12, textAlign: 'center', marginTop: 8 }}>
+          ✓ Dispositivo: {scaleData.name}
+        </Text>
+      )}
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 20 },
-  card: { padding: 20, borderRadius: 12, marginBottom: 16 },
-  cardTitle: { fontSize: 14, color: '#AAA', marginBottom: 6 },
-  metricValue: { fontSize: 32, fontWeight: 'bold', color: '#00E676' },
-  unit: { fontSize: 16, color: '#FFF' },
-  subtext: { fontSize: 12, color: '#888', marginTop: 4 },
-  divider: { height: 1, backgroundColor: '#333', marginVertical: 16 },
-  button: { padding: 16, borderRadius: 10, alignItems: 'center', marginTop: 10 },
-  buttonText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
-});
