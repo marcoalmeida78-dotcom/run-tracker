@@ -41,7 +41,13 @@ export default function AppModals({
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>🔴 Indicador de Frequência</Text>
-            <Text style={styles.modalText}>Avalia a consistência nos últimos 7 dias.</Text>
+            <Text style={styles.modalText}>
+              Esta bola reflete a tua consistência nos últimos 7 dias, com base no número de
+              exercícios guardados no histórico nesse período:{'\n\n'}
+              🟢 Verde — 3 ou mais dias com exercício guardado nos últimos 7 dias.{'\n'}
+              🟡 Amarelo — exatamente 2 dias com exercício guardado nos últimos 7 dias.{'\n'}
+              🔴 Vermelho — menos de 2 dias com exercício guardado nos últimos 7 dias.
+            </Text>
             <TouchableOpacity style={styles.modalBtn} onPress={onCloseStatusInfoModal}>
               <Text style={styles.modalBtnText}>Compreendido</Text>
             </TouchableOpacity>

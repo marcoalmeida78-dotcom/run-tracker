@@ -19,40 +19,6 @@ export const calculateHaversine = (lat1, lon1, lat2, lon2) => {
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 };
 
-export const isWalkingActivity = (type) => type.startsWith('walk');
-
-export const calculateDynamicCadence = (currentSpeedKmH, type) => {
-  const spd = parseFloat(currentSpeedKmH) || 0;
-  if (isWalkingActivity(type)) {
-    if (spd <= 0) return 105;
-    // Modelo baseado no comprimento médio do passo (~0.70 m) em vez de uma
-    // fórmula linear arbitrária. cadência (passos/min) = distância por minuto / comprimento do passo.
-    // Ex: a 5 km/h -> (5000/60)/0.70 ≈ 119 SPM, próximo do valor real observado (115-118 passos/min).
-    const stepLengthM = 0.70;
-    const metersPerMin = spd * (1000 / 60);
-    const spm = metersPerMin / stepLengthM;
-    return Math.max(70, Math.min(140, Math.round(spm)));
-  } else {
-    if (spd <= 0) return 160;
-    // Corrida: a cadência real varia pouco com a velocidade (tipicamente 150-185 SPM);
-    // o que aumenta com a velocidade é sobretudo o comprimento da passada, não a cadência.
-    const spm = spd <= 6 ? 150 : 150 + (spd - 6) * 4;
-    return Math.max(140, Math.min(190, Math.round(spm)));
-  }
-};
-
-export const getCadenceFeedback = (spm, type, colors) => {
-  if (isWalkingActivity(type)) {
-    if (spm < 90) return { label: 'Cadência Baixa (<90 SPM)', color: colors.COLOR_PRIMARY };
-    if (spm <= 170) return { label: 'Cadência Ideal (90-170 SPM)', color: colors.COLOR_PRIMARY };
-    return { label: 'Cadência Alta (>170 SPM)', color: colors.COLOR_SECONDARY };
-  } else {
-    if (spm < 150) return { label: 'Cadência Baixa (<150 SPM)', color: colors.COLOR_PRIMARY };
-    if (spm <= 200) return { label: 'Cadência Ideal (150-200 SPM)', color: colors.COLOR_PRIMARY };
-    return { label: 'Cadência Alta (>200 SPM)', color: colors.COLOR_SECONDARY };
-  }
-};
-
 // --- CALORIAS ---
 // weightKg é opcional: passa o peso do perfil do utilizador; usa 70kg por omissão.
 export const calculateCalories = (distKm, timeSec, weightKg = 70) => {
@@ -94,14 +60,15 @@ export const calculate1MileRunVo2Max = (timeSec, profile) => {
 };
 
 // --- GERAÇÃO DA TIMELINE DE UMA SESSÃO DO PROGRAMA 0 AOS 5K ---
-export const generateTimeline = (sessionIdx, skipWarmup = false, skipCooldown = false) => {
+// O aquecimento e o arrefecimento fazem sempre parte da timeline gerada; saltá-los
+// passou a ser uma ação em tempo real dentro da sessão (ver skipCurrentPhase em index.js),
+// em vez de uma escolha feita antes de começar.
+export const generateTimeline = (sessionIdx) => {
   const lvlIdx = Math.floor(sessionIdx / 3);
   const lvl = RUN_PROGRAM_LEVELS[lvlIdx];
   const phases = [];
   let idCounter = 0;
-  if (!skipWarmup) {
-    phases.push({ id: idCounter++, label: 'AQUECIMENTO', durationSec: 300, type: 'warmup' });
-  }
+  phases.push({ id: idCounter++, label: 'AQUECIMENTO', durationSec: 300, type: 'warmup' });
   for (let i = 0; i < lvl.repeats; i++) {
     phases.push({ id: idCounter++, label: `CORRIDA ${i + 1}`, durationSec: lvl.runSec, type: 'run' });
     // Não junta caminhada depois da última corrida: a sessão deve terminar sempre numa secção
@@ -110,8 +77,6 @@ export const generateTimeline = (sessionIdx, skipWarmup = false, skipCooldown = 
       phases.push({ id: idCounter++, label: `CAMINHADA ${i + 1}`, durationSec: lvl.walkSec, type: 'walk' });
     }
   }
-  if (!skipCooldown) {
-    phases.push({ id: idCounter++, label: 'ARREFECIMENTO', durationSec: 300, type: 'cooldown' });
-  }
+  phases.push({ id: idCounter++, label: 'ARREFECIMENTO', durationSec: 300, type: 'cooldown' });
   return phases;
 };

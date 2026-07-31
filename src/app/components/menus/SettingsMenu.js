@@ -1,5 +1,41 @@
-import { Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { PanResponder, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { THEMES } from '../../constants/themes';
+
+// Slider simples (sem dependências externas) para ajustar a opacidade do
+// "nevoeiro" sobre a imagem de fundo. Arrasta-se o polegar ou toca-se
+// diretamente na barra para definir o valor (0 a 1).
+function OpacitySlider({ styles, value, onChange }) {
+  const [trackWidth, setTrackWidth] = useState(0);
+
+  const updateFromLocalX = (x) => {
+    if (trackWidth <= 0) return;
+    const ratio = Math.max(0, Math.min(1, x / trackWidth));
+    onChange(ratio);
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => updateFromLocalX(evt.nativeEvent.locationX),
+      onPanResponderMove: (evt) => updateFromLocalX(evt.nativeEvent.locationX),
+    })
+  ).current;
+
+  return (
+    <View
+      style={styles.sliderTrackWrapper}
+      onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
+      {...panResponder.panHandlers}
+    >
+      <View style={styles.sliderTrackBg}>
+        <View style={[styles.sliderTrackFill, { width: `${value * 100}%` }]} />
+      </View>
+      <View style={[styles.sliderThumb, { left: `${value * 100}%` }]} />
+    </View>
+  );
+}
 
 export default function SettingsMenu({
   styles,
@@ -9,6 +45,8 @@ export default function SettingsMenu({
   profile,
   onSaveProfile,
   onResetAllData,
+  fogOpacity,
+  onChangeFogOpacity,
 }) {
   return (
     <View style={styles.accordionBodyGrid}>
@@ -37,6 +75,15 @@ export default function SettingsMenu({
           );
         })}
       </View>
+
+      <View style={styles.divider} />
+      <Text style={styles.sectionSubTitle}>OPACIDADE DO FUNDO (NEVOEIRO)</Text>
+      <View style={styles.sliderLabelRow}>
+        <Text style={styles.inputLabel}>Imagem visível</Text>
+        <Text style={styles.sliderValueText}>{Math.round(fogOpacity * 100)}%</Text>
+        <Text style={styles.inputLabel}>Nevoeiro total</Text>
+      </View>
+      <OpacitySlider styles={styles} value={fogOpacity} onChange={onChangeFogOpacity} />
 
       <View style={styles.divider} />
       <Text style={styles.sectionSubTitle}>PERFIL DO UTILIZADOR</Text>

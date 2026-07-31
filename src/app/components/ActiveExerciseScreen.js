@@ -2,7 +2,7 @@ import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { LEAFLET_MAP_HTML } from '../constants/mapHtml';
 import { SUDDEN_DEATH_BLOCKS } from '../constants/runProgram';
-import { calculateCalories, formatHMS, getCadenceFeedback } from '../utils/calculations';
+import { calculateCalories, formatHMS } from '../utils/calculations';
 
 export default function ActiveExerciseScreen({
   colors,
@@ -18,13 +18,13 @@ export default function ActiveExerciseScreen({
   phaseTimeLeft,
   seconds,
   speed,
-  cadence,
   profile,
   activeConfig,
   isPaused,
   onTogglePause,
   onFinishUser,
   onCancel,
+  onSkipPhase,
   noSignalAlert,
 }) {
   // Ponto 2: Cálculo da Contagem Decrescente para o Desafio Morte Súbita
@@ -98,6 +98,15 @@ export default function ActiveExerciseScreen({
               );
             })}
           </View>
+
+          {/* Saltar aquecimento/arrefecimento EM DIRETO, sem cancelar a sessão */}
+          {(timelinePhases[currentPhaseIndex]?.type === 'warmup' || timelinePhases[currentPhaseIndex]?.type === 'cooldown') && (
+            <TouchableOpacity style={styles.skipPhaseBtn} onPress={onSkipPhase}>
+              <Text style={styles.skipPhaseBtnText}>
+                {timelinePhases[currentPhaseIndex]?.type === 'warmup' ? 'SALTAR AQUECIMENTO ▶' : 'SALTAR ARREFECIMENTO ▶'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -122,26 +131,17 @@ export default function ActiveExerciseScreen({
           <Text style={styles.metricLabel}>VELOCIDADE</Text>
           <Text style={styles.metricValue}>{speed} km/h</Text>
         </View>
-        <View style={styles.bentoCardActive}>
-          <Text style={styles.metricLabel}>CADÊNCIA</Text>
-          <Text style={[styles.metricValue, { color: getCadenceFeedback(cadence, exerciseType, colors).color }]}>{cadence} SPM</Text>
-        </View>
+        {/* Ponto 1: Botão Terminar e Guardar ocupa o espaço que era da Cadência.
+            Existe em todos os exercícios, exceto nas sessões do plano 0 aos 5K (75 sessões). */}
+        {exerciseType !== 'run_program' && (
+          <TouchableOpacity style={[styles.bentoCardActive, styles.bentoFinishCard]} onPress={onFinishUser}>
+            <Text style={styles.bentoFinishCardText}>TERMINAR{'\n'}E GUARDAR</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Botões de Ação do Exercício */}
       <View style={{ gap: 10, marginTop: 15, width: '100%' }}>
-        {/* Ponto 1: Botão para Terminar e Guardar (Caminhada livre ou treinos sem meta fixa) */}
-        {(exerciseType === 'walk_normal' || !activeConfig?.targetTimeSec) && (
-          <TouchableOpacity 
-            style={[styles.actionBtnLight, { backgroundColor: '#22c55e', paddingVertical: 14 }]} 
-            onPress={onFinishUser}
-          >
-            <Text style={[styles.actionBtnTextDark, { color: '#ffffff', fontWeight: 'bold', textAlign: 'center' }]}>
-              TERMINAR E GUARDAR
-            </Text>
-          </TouchableOpacity>
-        )}
-
         <View style={styles.activeBtnRow}>
           <TouchableOpacity style={styles.pauseBtn} onPress={onTogglePause}>
             <Text style={styles.pauseBtnText}>{isPaused ? 'RETOMAR' : 'PAUSAR'}</Text>

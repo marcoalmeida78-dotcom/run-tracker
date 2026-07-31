@@ -23,13 +23,11 @@ import { LOCATION_TASK_NAME, setBackgroundLocationHandler } from './tasks/locati
 import { getStyles } from './styles/styles';
 import {
   calculateCalories,
-  calculateDynamicCadence,
   calculateHaversine,
   calculate15MilesVo2Max,
   calculate1MileRunVo2Max,
   calculateRockportVo2Max,
   generateTimeline,
-  isWalkingActivity,
 } from './utils/calculations';
 
 import AppModals from './components/modals/AppModals';
@@ -54,8 +52,9 @@ export default function App() {
   const [history, setHistory] = useState([]);
   const [currentSessionIndex, setCurrentSessionIndex] = useState(0); 
   const [completedSessions, setCompletedSessions] = useState([]); 
-  const [skipWarmup, setSkipWarmup] = useState(false);
-  const [skipCooldown, setSkipCooldown] = useState(false);
+
+  // Opacidade do "nevoeiro" sobre a imagem de fundo (0 = imagem bem visível, 1 = totalmente escondida)
+  const [fogOpacity, setFogOpacity] = useState(0.45);
 
   const [isExercising, setIsExercising] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -70,7 +69,6 @@ export default function App() {
   const [seconds, setSeconds] = useState(0);
   const [distance, setDistance] = useState(0);
   const [speed, setSpeed] = useState(0);
-  const [cadence, setCadence] = useState(115);
 
   const [isMapReady, setIsMapReady] = useState(false);
 
@@ -104,7 +102,6 @@ export default function App() {
   const startTimeRef = useRef(null);
   const pauseStartTimeRef = useRef(null);
   const totalPausedTimeRef = useRef(0);
-  const lastCadenceNoticeTime = useRef(0);
   const lastMilhaNoticeStep = useRef(0);
 
   // --- NOVO: Ref de segurança (Ponto 3) ---
@@ -119,7 +116,6 @@ export default function App() {
   const secondsRef = useRef(0);
   const distanceRef = useRef(0);
   const speedRef = useRef(0);
-  const cadenceRef = useRef(115);
   const currentPhaseIndexRef = useRef(0);
   const activeConfigRef = useRef(null);
   const best1MilhaSecRef = useRef(null);
@@ -231,6 +227,12 @@ export default function App() {
       const savedTheme = await AsyncStorage.getItem('@user_theme');
       if (savedTheme && THEMES[savedTheme]) setCurrentTheme(savedTheme);
 
+      const savedFogOpacity = await AsyncStorage.getItem('@fog_opacity');
+      if (savedFogOpacity !== null) {
+        const parsedOpacity = parseFloat(savedFogOpacity);
+        if (!isNaN(parsedOpacity)) setFogOpacity(Math.max(0, Math.min(1, parsedOpacity)));
+      }
+
       const savedProfile = await AsyncStorage.getItem('@user_profile');
       const savedHistory = await AsyncStorage.getItem('@user_history');
       const savedSession = await AsyncStorage.getItem('@current_session_index');
@@ -271,6 +273,12 @@ export default function App() {
   const changeTheme = async (themeKey) => {
     setCurrentTheme(themeKey);
     await AsyncStorage.setItem('@user_theme', themeKey);
+  };
+
+  const changeFogOpacity = async (value) => {
+    const clamped = Math.max(0, Math.min(1, value));
+    setFogOpacity(clamped);
+    await AsyncStorage.setItem('@fog_opacity', clamped.toString());
   };
 
   const updateRecordsFromHistory = (histList) => {
@@ -421,37 +429,19 @@ export default function App() {
   };
 
   const launchProgramSession = (sessionIdx, isUpdatingProgression) => {
-    const startNow = () => {
-      const phases = generateTimeline(sessionIdx, skipWarmup, skipCooldown);
-      const totalSec = phases.reduce((acc, p) => acc + p.durationSec, 0);
-      setTimelinePhases(phases);
-      setCurrentPhaseIndex(0);
-      currentPhaseIndexRef.current = 0;
-      setPhaseTimeLeft(phases[0].durationSec);
+    const phases = generateTimeline(sessionIdx);
+    const totalSec = phases.reduce((acc, p) => acc + p.durationSec, 0);
+    setTimelinePhases(phases);
+    setCurrentPhaseIndex(0);
+    currentPhaseIndexRef.current = 0;
+    setPhaseTimeLeft(phases[0].durationSec);
 
-      const lvl = RUN_PROGRAM_LEVELS[Math.floor(sessionIdx / 3)];
-      startExerciseSession(
-        'run_program',
-        `Corrida: ${lvl.title} - ${lvl.sessions[sessionIdx % 3]}`,
-        { targetTimeSec: totalSec, phases, sessionIndex: sessionIdx, isProgression: isUpdatingProgression }
-      );
-    };
-
-    if (skipWarmup || skipCooldown) {
-      const partes = [];
-      if (skipWarmup) partes.push('o aquecimento');
-      if (skipCooldown) partes.push('o arrefecimento');
-      Alert.alert(
-        '⚠️ Aviso',
-        `Esta sessão vai começar sem ${partes.join(' e sem ')}. Isto aumenta o risco de lesão. Queres continuar?`,
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          { text: 'Continuar assim', onPress: startNow },
-        ]
-      );
-    } else {
-      startNow();
-    }
+    const lvl = RUN_PROGRAM_LEVELS[Math.floor(sessionIdx / 3)];
+    startExerciseSession(
+      'run_program',
+      `Corrida: ${lvl.title} - ${lvl.sessions[sessionIdx % 3]}`,
+      { targetTimeSec: totalSec, phases, sessionIndex: sessionIdx, isProgression: isUpdatingProgression }
+    );
   };
 
   // --- NOVO: Função para ativar a Pausa de Segurança (Ponto 3) ---
@@ -500,7 +490,7 @@ export default function App() {
   };
 
   const tickExercise = (now, currentDist, currentSpeed) => {
-    if (isPausedRef.current || isFinishingRef.current || !startTimeRef.current) return;
+    if (!isExercisingRef.current || isPausedRef.current || isFinishingRef.current || !startTimeRef.current) return;
 
     // Ponto 3: Verificação de Paragem Prolongada (> 120s sem alteração significativa na distância)
     if (!safetyPauseTriggeredRef.current && (now - lastMovementTimeRef.current > 120000)) {
@@ -580,8 +570,6 @@ export default function App() {
 
     promptBatteryOptimizationIfNeeded();
 
-    const defaultCadence = isWalkingActivity(type) ? 105 : 160;
-
     setExerciseType(type);
     exerciseTypeRef.current = type;
     setExerciseTitle(title);
@@ -592,7 +580,6 @@ export default function App() {
     setSeconds(0);
     setDistance(0);
     setSpeed(0);
-    setCadence(defaultCadence);
     setVo2MaxResult(null);
     setShowEsquinaModal(false);
     esquinaTargetMultiplierRef.current = 1;
@@ -606,7 +593,6 @@ export default function App() {
     suddenDeathBlockStartTimeRef.current = Date.now();
     lastCountdownSecRef.current = -1;
 
-    cadenceRef.current = defaultCadence;
     setIsExercising(true);
     setIsPaused(false);
     isFinishingRef.current = false;
@@ -615,7 +601,6 @@ export default function App() {
     distanceRef.current = 0;
     speedRef.current = 0;
     lastLocation.current = null;
-    lastCadenceNoticeTime.current = 0;
 
     routeCoordsRef.current = [];
     currentCoordRef.current = null;
@@ -638,7 +623,10 @@ export default function App() {
     }, 1000);
 
     const handleLocationUpdate = (loc) => {
-      if (isPausedRef.current || isFinishingRef.current) return;
+      // Proteção contra atualizações de GPS "perdidas" que ainda chegam depois de o
+      // exercício ter sido cancelado/terminado (ex: race condition entre o cancelamento
+      // e a paragem efetiva da tarefa de localização em segundo plano).
+      if (!isExercisingRef.current || isPausedRef.current || isFinishingRef.current) return;
 
       const { latitude, longitude, speed: currentSpeed } = loc.coords;
       const speedKmH = currentSpeed && currentSpeed > 0 ? (currentSpeed * 3.6).toFixed(1) : 0;
@@ -650,10 +638,6 @@ export default function App() {
         triggerSafetyPause('speed');
         return;
       }
-
-      const updatedCadence = calculateDynamicCadence(speedKmH, type);
-      setCadence(updatedCadence);
-      cadenceRef.current = updatedCadence;
 
       let newDist = distanceRef.current;
       if (lastLocation.current) {
@@ -743,6 +727,45 @@ export default function App() {
     }
   };
 
+  // Ponto: Saltar aquecimento/arrefecimento EM DIRETO, sem ter de cancelar a sessão.
+  // Só é permitido saltar a fase que está atualmente em curso (aquecimento ou arrefecimento).
+  const skipCurrentPhase = () => {
+    const phases = activeConfigRef.current?.phases;
+    if (!phases || !phases.length) return;
+
+    const idx = currentPhaseIndexRef.current;
+    const currentPhase = phases[idx];
+    if (!currentPhase || (currentPhase.type !== 'warmup' && currentPhase.type !== 'cooldown')) return;
+
+    // Soma a duração de todas as fases até (e incluindo) a fase atual, e "empurra" o
+    // relógio interno do exercício para essa fronteira, saltando o tempo restante desta fase.
+    let accumulated = 0;
+    for (let i = 0; i <= idx; i++) accumulated += phases[i].durationSec;
+
+    const secondsToSkip = accumulated - secondsRef.current;
+    if (secondsToSkip > 0) {
+      totalPausedTimeRef.current -= secondsToSkip * 1000;
+    }
+    secondsRef.current = accumulated;
+    setSeconds(accumulated);
+
+    if (idx >= phases.length - 1) {
+      // Era a última fase (arrefecimento a fechar a sessão) - termina o treino já.
+      autoFinishExercise(exerciseTypeRef.current, exerciseTitleRef.current, accumulated, distanceRef.current, speedRef.current, activeConfigRef.current);
+      return;
+    }
+
+    const nextIdx = idx + 1;
+    currentPhaseIndexRef.current = nextIdx;
+    setCurrentPhaseIndex(nextIdx);
+    setPhaseTimeLeft(phases[nextIdx].durationSec);
+    Vibration.vibrate([300, 100, 300]);
+    if (phases[nextIdx].type === 'run') playAudio('Comece a correr');
+    else if (phases[nextIdx].type === 'walk') playAudio('Comece a andar');
+    else if (phases[nextIdx].type === 'cooldown') playAudio('Início do arrefecimento');
+    else if (phases[nextIdx].type === 'warmup') playAudio('Aquecimento');
+  };
+
   const togglePause = () => {
     if (!isPaused) {
       pauseStartTimeRef.current = Date.now();
@@ -780,6 +803,13 @@ export default function App() {
   };
 
   const stopAndCleanupExercise = () => {
+    // Marca imediatamente como "a terminar" para bloquear qualquer tick ou atualização de
+    // localização que já esteja em curso neste preciso instante, e limpa qualquer mensagem
+    // de áudio que ainda esteja em fila/a tocar. Isto fecha o "buraco" que permitia que o
+    // aviso de fim de bloco da Morte Súbita continuasse a repetir-se depois de cancelar.
+    isFinishingRef.current = true;
+    try { Speech.stop(); } catch (e) {}
+
     if (locationTaskActiveRef.current) {
       locationTaskActiveRef.current = false;
       setBackgroundLocationHandler(null);
@@ -791,6 +821,23 @@ export default function App() {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
+
+    // Reset completo da identidade do exercício, para que nenhuma referência antiga (tipo,
+    // configuração, bloco da Morte Súbita, cronómetro, etc.) sobreviva depois de cancelar.
+    exerciseTypeRef.current = '';
+    exerciseTitleRef.current = '';
+    activeConfigRef.current = null;
+    startTimeRef.current = null;
+    pauseStartTimeRef.current = null;
+    totalPausedTimeRef.current = 0;
+    secondsRef.current = 0;
+    distanceRef.current = 0;
+    speedRef.current = 0;
+    currentPhaseIndexRef.current = 0;
+    suddenDeathBlockRef.current = 1;
+    suddenDeathBlockStartTimeRef.current = 0;
+    lastCountdownSecRef.current = -1;
+
     setIsExercising(false);
     setIsPaused(false);
     setShowEsquinaModal(false);
@@ -829,7 +876,6 @@ export default function App() {
       pace: finalDist > 0 ? (finalSec / 60 / finalDist).toFixed(2) : '0.00',
       calories: calculateCalories(finalDist, finalSec, profile.weight),
       speed: finalSpeed,
-      cadence,
       vo2Max: vo2Val,
     };
 
@@ -895,17 +941,22 @@ export default function App() {
     ]);
   };
 
+  // Ponto 4: Conta DIAS DISTINTOS (não o nº de treinos) com pelo menos um exercício
+  // guardado no histórico nos últimos 7 dias — é isso que decide a cor da bola de status.
   const getWorkoutsLast7DaysCount = () => {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    return history.filter(item => {
+    const uniqueDays = new Set();
+    history.forEach(item => {
       const parts = item.date.split('/');
       if (parts.length === 3) {
         const itemDate = new Date(parts[2], parts[1] - 1, parts[0]);
-        return itemDate >= sevenDaysAgo;
+        if (itemDate >= sevenDaysAgo) {
+          uniqueDays.add(item.date);
+        }
       }
-      return false;
-    }).length;
+    });
+    return uniqueDays.size;
   };
 
   const workoutsLast7Days = getWorkoutsLast7DaysCount();
@@ -916,7 +967,7 @@ export default function App() {
 
   return (
     <ImageBackground source={APP_BACKGROUND_IMAGE} style={{ flex: 1 }} resizeMode="cover">
-    <View style={dynamicStyles.backgroundFogOverlay} pointerEvents="none" />
+    <View style={[dynamicStyles.backgroundFogOverlay, { opacity: fogOpacity }]} pointerEvents="none" />
     <SafeAreaView style={dynamicStyles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
@@ -952,13 +1003,13 @@ export default function App() {
           phaseTimeLeft={phaseTimeLeft}
           seconds={seconds}
           speed={speed}
-          cadence={cadence}
           profile={profile}
           activeConfig={activeConfig}
           isPaused={isPaused}
           onTogglePause={togglePause}
           onFinishUser={handleUserFinishExercise}
           onCancel={cancelExercise}
+          onSkipPhase={skipCurrentPhase}
           noSignalAlert={noSignalAlert}
         />
       ) : (
@@ -983,10 +1034,8 @@ export default function App() {
           history={history}
           onDeleteHistoryItem={handleDeleteHistoryItem}
           onShowBatteryInfo={() => setShowBatteryInfoModal(true)}
-          skipWarmup={skipWarmup}
-          onToggleSkipWarmup={() => setSkipWarmup(prev => !prev)}
-          skipCooldown={skipCooldown}
-          onToggleSkipCooldown={() => setSkipCooldown(prev => !prev)}
+          fogOpacity={fogOpacity}
+          onChangeFogOpacity={changeFogOpacity}
         />
       )}
     </SafeAreaView>
