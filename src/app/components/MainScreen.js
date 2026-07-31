@@ -7,6 +7,14 @@ import RunProgramMenu from './menus/RunProgramMenu';
 import SettingsMenu from './menus/SettingsMenu';
 import WalksMenu from './menus/WalksMenu';
 
+// ============================================================================
+// INÍCIO - ADIÇÃO: MENU SAÚDE (DESCOMENTAR / APAGAR SE NECESSÁRIO)
+// ============================================================================
+import HealthMenu from './menus/HealthMenu';
+// ============================================================================
+// FIM - ADIÇÃO: MENU SAÚDE
+// ============================================================================
+
 export default function MainScreen({
   colors,
   styles,
@@ -172,8 +180,30 @@ export default function MainScreen({
         <HistoryMenu styles={styles} onClose={() => onToggleAccordion('historico')} history={history} onDeleteHistoryItem={onDeleteHistoryItem} />
       )}
 
+      {/* ============================================================================ */}
+      {/* INÍCIO - ADIÇÃO: CARD DO MENU SAÚDE & METABOLISMO                            */}
+      {/* (INTEGRADO NA LÓGICA DE ACORDEÃO NATIVA DO TEU MAINSCREEN)                   */}
+      {/* ============================================================================ */}
+      <TouchableOpacity
+        style={[styles.bentoHeroBottom, activeMenu === 'saude' && styles.activeBentoTileHighlight, { marginTop: 12 }]}
+        onPress={() => onToggleAccordion('saude')}
+      >
+        <View style={styles.cardHeaderRow}>
+          <Text style={styles.cardHeaderTitleDark}>🏥 SAÚDE & METABOLISMO</Text>
+          <Text style={styles.accordionIcon}>{activeMenu === 'saude' ? '▲ FECHAR' : '▼ ABRIR'}</Text>
+        </View>
+        <Text style={styles.recommendationTextDark}>TMB, Balança Xiaomi e Google Fit</Text>
+      </TouchableOpacity>
+
+      {activeMenu === 'saude' && (
+        <HealthMenu colors={colors} onClose={() => onToggleAccordion('saude')} />
+      )}
+      {/* ============================================================================ */}
+      {/* FIM - ADIÇÃO: CARD DO MENU SAÚDE                                             */}
+      {/* ============================================================================ */}
+
       {/* --- BARRA DE ENERGIA DO PLANO --- */}
-      <TouchableOpacity style={styles.batterySectionTouchable} onPress={onShowBatteryInfo}>
+      <TouchableOpacity style={[styles.batterySectionTouchable, { marginTop: 12 }]} onPress={onShowBatteryInfo}>
         <View style={styles.batteryTitleRow}>
           <Text style={styles.batterySectionTitle}>BARRA DE ENERGIA DO PLANO (75 SESSÕES)</Text>
         </View>
@@ -196,17 +226,6 @@ export default function MainScreen({
           <View style={styles.batteryTerminal} />
         </View>
         <Text style={styles.batteryCountText}>{completedSessions.length} / 75 sessões concluídas</Text>
-      </TouchableOpacity>
-{/* CARD DO MENU SAÚDE & METABOLISMO */}
-      <TouchableOpacity
-        style={[styles.bentoHeroBottom, activeMenu === 'saude' && styles.activeBentoTileHighlight]}
-        onPress={() => setActiveModal('health')}
-      >
-        <View style={styles.cardHeaderRow}>
-          <Text style={styles.cardHeaderTitleDark}>🏥 SAÚDE & METABOLISMO</Text>
-          <Text style={styles.accordionIcon}>▼ ABRIR</Text>
-        </View>
-        <Text style={styles.recommendationTextDark}>TMB, Balança Xiaomi e Google Fit</Text>
       </TouchableOpacity>
     </ScrollView>
   );
