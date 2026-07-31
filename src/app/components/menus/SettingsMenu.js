@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import { PanResponder, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { THEMES } from '../../constants/themes';
 
@@ -6,18 +6,29 @@ import { THEMES } from '../../constants/themes';
 // "nevoeiro" sobre a imagem de fundo. Arrasta-se o polegar ou toca-se
 // diretamente na barra para definir o valor (0 a 1).
 function OpacitySlider({ styles, value, onChange }) {
-  const [trackWidth, setTrackWidth] = useState(0);
+  // Importante: o PanResponder só é criado UMA VEZ (useRef). Por isso não pode
+  // ler diretamente de useState (isso ficaria "preso" no valor do 1º render, que é
+  // sempre 0 antes do onLayout correr) — tem de ler sempre de refs, cujo .current
+  // é sempre o valor mais recente, mesmo dentro de um closure criado há muito tempo.
+  const trackWidthRef = useRef(0);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   const updateFromLocalX = (x) => {
-    if (trackWidth <= 0) return;
-    const ratio = Math.max(0, Math.min(1, x / trackWidth));
-    onChange(ratio);
+    const width = trackWidthRef.current;
+    if (width <= 0) return;
+    const ratio = Math.max(0, Math.min(1, x / width));
+    onChangeRef.current(ratio);
   };
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      // Só "rouba" o gesto ao ScrollView à volta quando o arrasto é claramente horizontal,
+      // para não impedir o scroll vertical normal do menu de Definições.
+      onMoveShouldSetPanResponder: (evt, gestureState) => Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
+      onMoveShouldSetPanResponderCapture: (evt, gestureState) => Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
       onPanResponderGrant: (evt) => updateFromLocalX(evt.nativeEvent.locationX),
       onPanResponderMove: (evt) => updateFromLocalX(evt.nativeEvent.locationX),
     })
@@ -26,7 +37,7 @@ function OpacitySlider({ styles, value, onChange }) {
   return (
     <View
       style={styles.sliderTrackWrapper}
-      onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
+      onLayout={(e) => { trackWidthRef.current = e.nativeEvent.layout.width; }}
       {...panResponder.panHandlers}
     >
       <View style={styles.sliderTrackBg}>
