@@ -871,6 +871,11 @@ export default function App() {
       id: Date.now().toString(),
       title,
       date: new Date().toLocaleDateString('pt-PT'),
+      // startTime/endTime (ISO): usados apenas pelo menu Saúde para não
+      // contar as mesmas calorias duas vezes com o Google Fit. Não afeta
+      // nenhuma lógica existente do histórico ou das restantes secções.
+      startTime: startTimeRef.current ? new Date(startTimeRef.current).toISOString() : null,
+      endTime: new Date().toISOString(),
       timeSec: finalSec,
       distanceKm: finalDist.toFixed(2),
       pace: finalDist > 0 ? (finalSec / 60 / finalDist).toFixed(2) : '0.00',

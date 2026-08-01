@@ -1,95 +1,145 @@
-import { initialize, requestPermission, readRecords } from 'react-native-health-connect';
+// ============================================================================
+// MÓDULO ISOLADO: CÁLCULOS DO MENU SAÚDE
+// Nada neste ficheiro é importado fora de components/menus/HealthMenu.js,
+// para manter a evolução deste menu separada do resto da app já estabilizada.
+// ============================================================================
+import { initialize, getGrantedPermissions, requestPermission, readRecords } from 'react-native-health-connect';
+
+const HEALTH_CONNECT_PERMISSIONS = [
+  { accessType: 'read', recordType: 'ActiveCaloriesBurned' },
+];
 
 /**
- * Cálculo da Taxa Metabólica Basal (TMB) - Mifflin-St Jeor
+ * TMB (Taxa Metabólica Basal) — fórmula de Mifflin-St Jeor.
+ * Recebe o objeto profile da app ({ weight, height, age, gender }).
+ * gender: 'masculino' / 'feminino' (aceita também 'male'/'m').
  */
-export const calculateBMR = (weightInKg, heightInCm, age, gender) => {
-  if (!weightInKg || !heightInCm || !age) return 0;
-  const isMale = gender?.toLowerCase().startsWith('m') || gender?.toLowerCase() === 'male';
-  const baseBMR = (10 * parseFloat(weightInKg)) + (6.25 * parseFloat(heightInCm)) - (5 * parseInt(age));
-  return Math.round(isMale ? baseBMR + 5 : baseBMR - 161);
+export const calculateBMR = (profile) => {
+  const weight = parseFloat(profile?.weight);
+  const height = parseFloat(profile?.height);
+  const age = parseInt(profile?.age, 10);
+  if (!weight || !height || !age) return 0;
+
+  const genderStr = (profile?.gender || 'masculino').toLowerCase();
+  const isMale = genderStr.startsWith('m');
+
+  const base = 10 * weight + 6.25 * height - 5 * age;
+  return Math.round(isMale ? base + 5 : base - 161);
 };
 
-/**
- * Calcula calorias ativas líquidas descontando a TMB proporcional ao tempo de treino
- */
-export const calculateNetActiveCalories = (grossCaloriesBurned, durationInMinutes, dailyBMR) => {
-  if (!dailyBMR || dailyBMR <= 0 || !durationInMinutes) return grossCaloriesBurned || 0;
-  const bmrPerMinute = dailyBMR / 1440;
-  const baselineCaloriesDuringWorkout = durationInMinutes * bmrPerMinute;
-  return Math.max(0, Math.round(grossCaloriesBurned - baselineCaloriesDuringWorkout));
-};
+// Devolve a mesma formatação de data usada no histórico da app (ex: "01/08/2026"),
+// para conseguirmos identificar quais os registos de HOJE.
+const todayPTString = () => new Date().toLocaleDateString('pt-PT');
 
 /**
- * Lê sessões de exercício reais do Google Fit / Health Connect no próprio dia
+ * Soma as calorias dos exercícios feitos HOJE na própria app (menu Histórico),
+ * e devolve também os intervalos de tempo desses exercícios (quando disponíveis),
+ * para depois se poder evitar contar as mesmas calorias outra vez a partir do
+ * Google Fit.
  */
-export const fetchRealGoogleFitSessions = async () => {
+export const getAppExerciseSummaryToday = (history = []) => {
+  const today = todayPTString();
+  const todaysWorkouts = (history || []).filter((item) => item.date === today);
+
+  let totalCalories = 0;
+  const intervals = [];
+
+  todaysWorkouts.forEach((item) => {
+    totalCalories += parseFloat(item.calories) || 0;
+    // startTime/endTime só existem em registos guardados depois desta atualização.
+    // Registos antigos (sem essas datas) continuam a contar para o total de
+    // calorias, só não entram na deduplicação por intervalo com o Google Fit.
+    if (item.startTime && item.endTime) {
+      const start = new Date(item.startTime).getTime();
+      const end = new Date(item.endTime).getTime();
+      if (!Number.isNaN(start) && !Number.isNaN(end) && end > start) {
+        intervals.push({ start, end });
+      }
+    }
+  });
+
+  return { totalCalories: Math.round(totalCalories), workoutCount: todaysWorkouts.length, intervals };
+};
+
+const intervalsOverlap = (aStart, aEnd, bStart, bEnd) => aStart < bEnd && bStart < aEnd;
+
+/**
+ * Lê do Google Fit / Health Connect as calorias ATIVAS (ActiveCaloriesBurned)
+ * registadas hoje, registo a registo (não agregado), e soma apenas as que NÃO
+ * se sobrepõem aos intervalos de tempo dos exercícios já feitos na app — assim
+ * as mesmas calorias nunca são contadas duas vezes.
+ */
+export const fetchGoogleFitCaloriesToday = async (excludeIntervals = []) => {
   try {
     const isInitialized = await initialize();
-    if (!isInitialized) return [];
+    if (!isInitialized) {
+      return { totalCalories: 0, available: false, error: 'Health Connect não está disponível neste dispositivo.' };
+    }
 
-    // Pedir permissão para ler calorias ativas e sessões de treino
-    const grantedPermissions = await requestPermission([
-      { accessType: 'read', recordType: 'ActiveCaloriesBurned' },
-      { accessType: 'read', recordType: 'ExerciseSession' },
-    ]);
+    const granted = await getGrantedPermissions();
+    const alreadyGranted = HEALTH_CONNECT_PERMISSIONS.every((req) =>
+      granted.some((g) => g.recordType === req.recordType && g.accessType === req.accessType)
+    );
+    if (!alreadyGranted) {
+      const result = await requestPermission(HEALTH_CONNECT_PERMISSIONS);
+      if (!result || result.length === 0) {
+        return { totalCalories: 0, available: false, error: 'Permissão do Google Fit / Health Connect recusada.' };
+      }
+    }
 
-    if (!grantedPermissions) return [];
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
 
-    const startTime = new Date();
-    startTime.setHours(0, 0, 0, 0); // Início do dia de hoje
-    const endTime = new Date();
-
-    const response = await readRecords('ExerciseSession', {
+    const response = await readRecords('ActiveCaloriesBurned', {
       timeRangeFilter: {
         operator: 'between',
-        startTime: startTime.toISOString(),
-        endTime: endTime.toISOString(),
+        startTime: startOfDay.toISOString(),
+        endTime: now.toISOString(),
       },
     });
 
-    return response.records.map(record => ({
-      startTime: record.startTime,
-      endTime: record.endTime,
-      calories: record.activeCalories ? record.activeCalories.inKilocalories : 0,
-    }));
+    const records = response?.records || [];
+    let totalCalories = 0;
+
+    records.forEach((record) => {
+      const recStart = new Date(record.startTime).getTime();
+      const recEnd = new Date(record.endTime).getTime();
+      const kcal = record.energy?.inKilocalories || 0;
+
+      const overlapsAppWorkout = excludeIntervals.some((iv) =>
+        intervalsOverlap(recStart, recEnd, iv.start, iv.end)
+      );
+
+      if (!overlapsAppWorkout) {
+        totalCalories += kcal;
+      }
+    });
+
+    return { totalCalories: Math.round(totalCalories), available: true, error: null };
   } catch (error) {
-    console.warn('Health Connect não disponível ou rejeitado:', error);
-    return [];
+    return { totalCalories: 0, available: false, error: 'Erro ao ler dados do Google Fit.' };
   }
 };
 
 /**
- * Evita duplicação e contagem dupla entre a tua App de Corrida e o Google Fit
+ * Junta tudo: TMB + exercícios da app + Google Fit (sem duplicar), como pedido:
+ * "quanto o corpo queima para se manter vivo" + exercícios da app + Google Fit
+ * fora do intervalo já contado pelos exercícios da app.
  */
-export const deduplicateAndCalculateTotalCalories = (googleFitSessions = [], appRunSessions = [], dailyBMR = 0) => {
-  let totalNetExerciseCalories = 0;
+export const computeDailyEnergySummary = async (profile, history) => {
+  const bmr = calculateBMR(profile);
+  const appSummary = getAppExerciseSummaryToday(history);
+  const fitResult = await fetchGoogleFitCaloriesToday(appSummary.intervals);
 
-  // 1. Processar treinos da tua app de corrida (prioridade máxima)
-  const appIntervals = appRunSessions.map(run => {
-    const netCals = calculateNetActiveCalories(run.calories || 0, run.durationMinutes || 0, dailyBMR);
-    totalNetExerciseCalories += netCals;
-    return { 
-      start: new Date(run.startTime || Date.now()).getTime(), 
-      end: new Date(run.endTime || Date.now()).getTime() 
-    };
-  });
+  const total = bmr + appSummary.totalCalories + fitResult.totalCalories;
 
-  // 2. Processar treinos do Google Fit apenas fora da janela da app de corrida
-  googleFitSessions.forEach(fitSession => {
-    const fitStart = new Date(fitSession.startTime).getTime();
-    const fitEnd = new Date(fitSession.endTime).getTime();
-
-    const hasOverlap = appIntervals.some(
-      app => (fitStart >= app.start && fitStart < app.end) || (fitEnd > app.start && fitEnd <= app.end)
-    );
-
-    if (!hasOverlap) {
-      const durationMinutes = Math.max(1, (fitEnd - fitStart) / (1000 * 60));
-      const netCals = calculateNetActiveCalories(fitSession.calories || 0, durationMinutes, dailyBMR);
-      totalNetExerciseCalories += netCals;
-    }
-  });
-
-  return Math.round(totalNetExerciseCalories);
+  return {
+    bmr,
+    appExerciseCalories: appSummary.totalCalories,
+    appWorkoutCount: appSummary.workoutCount,
+    fitCalories: fitResult.totalCalories,
+    fitAvailable: fitResult.available,
+    fitError: fitResult.error,
+    total: Math.round(total),
+  };
 };

@@ -6,14 +6,7 @@ import HistoryMenu from './menus/HistoryMenu';
 import RunProgramMenu from './menus/RunProgramMenu';
 import SettingsMenu from './menus/SettingsMenu';
 import WalksMenu from './menus/WalksMenu';
-
-// ============================================================================
-// INÍCIO - ADIÇÃO: MENU SAÚDE (DESCOMENTAR / APAGAR SE NECESSÁRIO)
-// ============================================================================
 import HealthMenu from './menus/HealthMenu';
-// ============================================================================
-// FIM - ADIÇÃO: MENU SAÚDE
-// ============================================================================
 
 export default function MainScreen({
   colors,
@@ -176,13 +169,7 @@ export default function MainScreen({
         <Text style={styles.recommendationTextDark}>{history.length} treinos registados no total</Text>
       </TouchableOpacity>
 
-      {activeMenu === 'saude' && (
-  <HealthMenu colors={colors} profile={profile} onClose={() => onToggleAccordion('saude')} />)}
-
-      {/* ============================================================================ */}
-      {/* INÍCIO - ADIÇÃO: CARD DO MENU SAÚDE & METABOLISMO                            */}
-      {/* (INTEGRADO NA LÓGICA DE ACORDEÃO NATIVA DO TEU MAINSCREEN)                   */}
-      {/* ============================================================================ */}
+      {/* --- SAÚDE & METABOLISMO (menu isolado: ver components/menus/HealthMenu.js) --- */}
       <TouchableOpacity
         style={[styles.bentoHeroBottom, activeMenu === 'saude' && styles.activeBentoTileHighlight, { marginTop: 12 }]}
         onPress={() => onToggleAccordion('saude')}
@@ -195,11 +182,14 @@ export default function MainScreen({
       </TouchableOpacity>
 
       {activeMenu === 'saude' && (
-        <HealthMenu colors={colors} onClose={() => onToggleAccordion('saude')} />
+        <HealthMenu
+          colors={colors}
+          profile={profile}
+          history={history}
+          onSaveProfile={onSaveProfile}
+          onClose={() => onToggleAccordion('saude')}
+        />
       )}
-      {/* ============================================================================ */}
-      {/* FIM - ADIÇÃO: CARD DO MENU SAÚDE                                             */}
-      {/* ============================================================================ */}
 
       {/* --- BARRA DE ENERGIA DO PLANO --- */}
       <TouchableOpacity style={[styles.batterySectionTouchable, { marginTop: 12 }]} onPress={onShowBatteryInfo}>
