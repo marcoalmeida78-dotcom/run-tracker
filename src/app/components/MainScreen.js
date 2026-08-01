@@ -176,9 +176,8 @@ export default function MainScreen({
         <Text style={styles.recommendationTextDark}>{history.length} treinos registados no total</Text>
       </TouchableOpacity>
 
-      {activeMenu === 'historico' && (
-        <HistoryMenu styles={styles} onClose={() => onToggleAccordion('historico')} history={history} onDeleteHistoryItem={onDeleteHistoryItem} />
-      )}
+      {activeMenu === 'saude' && (
+  <HealthMenu colors={colors} profile={profile} onClose={() => onToggleAccordion('saude')} />)}
 
       {/* ============================================================================ */}
       {/* INÍCIO - ADIÇÃO: CARD DO MENU SAÚDE & METABOLISMO                            */}

@@ -7,23 +7,31 @@ import {
   initialize,
   requestPermission,
 } from 'react-native-health-connect';
+import { calculateBMR } from '../../utils/healthCalculations';
 
 const bleManager = new BleManager();
 
 const HEALTH_PERMISSIONS = [
   { accessType: 'read', recordType: 'ActiveCaloriesBurned' },
   { accessType: 'read', recordType: 'TotalCaloriesBurned' },
+  { accessType: 'read', recordType: 'Steps' },
 ];
 
-export default function HealthMenu({ colors, onClose }) {
+export default function HealthMenu({ colors, profile, onClose }) {
   const [activeCalories, setActiveCalories] = useState(0);
   const [isScanningScale, setIsScanningScale] = useState(false);
-  const [scaleData, setScaleData] = useState(null);
+  const [scaleWeight, setScaleWeight] = useState(null);
+  const [scaleStatus, setScaleStatus] = useState('');
+
+  // 1. CÁLCULO DA TMB (TAXA METABÓLICA BASAL)
+  const userProfile = profile || { gender: 'male', weight: 75, height: 175, age: 30 };
+  const bmrValue = calculateBMR ? calculateBMR(userProfile) : Math.round(10 * (userProfile.weight || 75) + 6.25 * (userProfile.height || 175) - 5 * (userProfile.age || 30) + 5);
 
   useEffect(() => {
     setupHealthConnect();
   }, []);
 
+  // 2. CONFIGURAÇÃO E LEITURA DO GOOGLE FIT / HEALTH CONNECT
   const setupHealthConnect = async () => {
     try {
       const isInitialized = await initialize();
@@ -32,8 +40,7 @@ export default function HealthMenu({ colors, onClose }) {
       const currentPermissions = await getGrantedPermissions();
       const alreadyGranted = HEALTH_PERMISSIONS.every((req) =>
         currentPermissions.some(
-          (granted) =>
-            granted.recordType === req.recordType && granted.accessType === req.accessType
+          (granted) => granted.recordType === req.recordType && granted.accessType === req.accessType
         )
       );
 
@@ -46,7 +53,7 @@ export default function HealthMenu({ colors, onClose }) {
         }
       }
     } catch (error) {
-      console.error('Erro ao configurar o Health Connect:', error);
+      console.error('Erro ao configurar Health Connect:', error);
     }
   };
 
@@ -61,31 +68,30 @@ export default function HealthMenu({ colors, onClose }) {
         endTime: now.toISOString(),
       };
 
-      const activeResult = await aggregateRecord({
-        recordType: 'ActiveCaloriesBurned',
+      // Tentar obter calorias totais despendidas
+      const totalResult = await aggregateRecord({
+        recordType: 'TotalCaloriesBurned',
         timeRangeFilter,
       });
 
-      if (activeResult?.ENERGY_TOTAL?.inKilocalories) {
-        setActiveCalories(Math.round(activeResult.ENERGY_TOTAL.inKilocalories));
+      if (totalResult?.ENERGY_TOTAL?.inKilocalories) {
+        setActiveCalories(Math.round(totalResult.ENERGY_TOTAL.inKilocalories));
       } else {
-        const totalResult = await aggregateRecord({
-          recordType: 'TotalCaloriesBurned',
+        // Fallback para ActiveCaloriesBurned
+        const activeResult = await aggregateRecord({
+          recordType: 'ActiveCaloriesBurned',
           timeRangeFilter,
         });
-
-        if (totalResult?.ENERGY_TOTAL?.inKilocalories) {
-          setActiveCalories(Math.round(totalResult.ENERGY_TOTAL.inKilocalories));
+        if (activeResult?.ENERGY_TOTAL?.inKilocalories) {
+          setActiveCalories(Math.round(activeResult.ENERGY_TOTAL.inKilocalories));
         }
       }
     } catch (error) {
-      console.error('Erro ao ler calorias:', error);
+      console.error('Erro ao ler calorias do Health Connect:', error);
     }
   };
 
-  // --------------------------------------------------------------------------
-  // PEDIDO DE PERMISSÕES DE BLUETOOTH (ANDROID)
-  // --------------------------------------------------------------------------
+  // 3. PERMISSÕES BLUETOOTH (ANDROID)
   const requestBluetoothPermissions = async () => {
     if (Platform.OS === 'android') {
       if (Platform.Version >= 31) {
@@ -108,53 +114,74 @@ export default function HealthMenu({ colors, onClose }) {
     return true;
   };
 
-  // --------------------------------------------------------------------------
-  // CONEXÃO COM A BALANÇA XIAOMI (BLE)
-  // --------------------------------------------------------------------------
+  // 4. PROCESSAR DADOS DE PESO DA BALANÇA XIAOMI (BLE ADVERTISING)
+  const parseXiaomiScaleWeight = (manufacturerData) => {
+    if (!manufacturerData) return null;
+    try {
+      // Descodificação de dados hex da Xiaomi Scale
+      const buffer = Buffer.from(manufacturerData, 'base64');
+      if (buffer.length >= 10) {
+        const weightRaw = (buffer[1] << 8) | buffer[0];
+        const isLbs = (buffer[2] & 0x01) !== 0;
+        const weight = isLbs ? (weightRaw / 100) * 0.453592 : weightRaw / 200;
+        return weight.toFixed(1);
+      }
+    } catch (e) {
+      console.log('Erro a descodificar peso:', e);
+    }
+    return null;
+  };
+
   const handleScanXiaomiScale = async () => {
     if (isScanningScale) return;
 
-    // 1. Pedir permissões do SO
     const hasPermission = await requestBluetoothPermissions();
     if (!hasPermission) {
-      Alert.alert('Permissão Negada', 'A app precisa de permissão de Bluetooth para procurar a balança.');
+      Alert.alert('Permissão Negada', 'Necessário permissão de Bluetooth para procurar a balança.');
       return;
     }
 
-    // 2. Verificar se o Bluetooth está ativo
     const state = await bleManager.state();
     if (state !== 'PoweredOn') {
-      Alert.alert('Bluetooth Desligado', 'Por favor, liga o Bluetooth do telemóvel e tenta novamente.');
+      Alert.alert('Bluetooth Desligado', 'Ativa o Bluetooth do telemóvel e tenta novamente.');
       return;
     }
 
     setIsScanningScale(true);
-    Alert.alert('Balança Xiaomi', 'A procurar... Suba para a balança agora para ativar a transmissão.');
+    setScaleStatus('A procurar balança... Suba para a balança agora.');
 
     bleManager.startDeviceScan(null, null, (error, device) => {
       if (error) {
         console.error('Erro no scan BLE:', error);
         setIsScanningScale(false);
         bleManager.stopDeviceScan();
-        Alert.alert('Erro Bluetooth', 'Falha ao iniciar a pesquisa de dispositivos.');
+        setScaleStatus('Erro ao procurar balança.');
         return;
       }
 
-      if (device && (device.name?.includes('MI Scale') || device.name?.includes('MIBCO') || device.name?.includes('MIBFS'))) {
-        bleManager.stopDeviceScan();
-        setIsScanningScale(false);
-
-        Alert.alert('Balança Detetada', `Ligado com sucesso a: ${device.name || 'Xiaomi Scale'}`);
-        setScaleData({ name: device.name, status: 'Conetado' });
+      if (device && (device.name?.includes('MI Scale') || device.name?.includes('MIBCO') || device.name?.includes('MIBFS') || device.name?.includes('Nymi'))) {
+        setScaleStatus('Balança encontrada! A ler peso...');
+        
+        if (device.manufacturerData) {
+          const parsedWeight = parseXiaomiScaleWeight(device.manufacturerData);
+          if (parsedWeight && parsedWeight > 5) {
+            setScaleWeight(parsedWeight);
+            setScaleStatus(`Peso registado: ${parsedWeight} kg`);
+            bleManager.stopDeviceScan();
+            setIsScanningScale(false);
+          }
+        }
       }
     });
 
+    // Timeout de segurança após 15 segundos
     setTimeout(() => {
       if (isScanningScale) {
         bleManager.stopDeviceScan();
         setIsScanningScale(false);
+        if (!scaleWeight) setScaleStatus('Tempo limite atingido. Tente subir novamente para a balança.');
       }
-    }, 12000);
+    }, 15000);
   };
 
   return (
@@ -168,10 +195,21 @@ export default function HealthMenu({ colors, onClose }) {
         )}
       </View>
 
+      {/* TMB (TAXA METABÓLICA BASAL) */}
+      <View style={{ backgroundColor: '#0f172a', padding: 12, borderRadius: 8, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <View>
+          <Text style={{ color: '#94a3b8', fontSize: 12 }}>TAXA METABÓLICA BASAL (TMB)</Text>
+          <Text style={{ color: '#4ade80', fontSize: 22, fontWeight: 'bold', marginTop: 2 }}>
+            {bmrValue} <Text style={{ fontSize: 14, color: '#e2e8f0' }}>kcal/dia</Text>
+          </Text>
+        </View>
+        <Text style={{ fontSize: 24 }}>🔥</Text>
+      </View>
+
       {/* PAINEL DE CALORIAS GOOGLE FIT */}
       <View style={{ backgroundColor: '#0f172a', padding: 12, borderRadius: 8, marginBottom: 12 }}>
-        <Text style={{ color: '#94a3b8', fontSize: 12 }}>CALORIAS DO GOOGLE FIT (HOJE)</Text>
-        <Text style={{ color: '#38bdf8', fontSize: 24, fontWeight: 'bold', marginTop: 4 }}>
+        <Text style={{ color: '#94a3b8', fontSize: 12 }}>CALORIAS REGISTADAS (GOOGLE FIT)</Text>
+        <Text style={{ color: '#38bdf8', fontSize: 22, fontWeight: 'bold', marginTop: 4 }}>
           {activeCalories} <Text style={{ fontSize: 14, color: '#e2e8f0' }}>kcal</Text>
         </Text>
         <TouchableOpacity onPress={fetchActiveCalories} style={{ marginTop: 8 }}>
@@ -179,7 +217,7 @@ export default function HealthMenu({ colors, onClose }) {
         </TouchableOpacity>
       </View>
 
-      {/* BOTÃO DA BALANÇA XIAOMI */}
+      {/* BALANÇA XIAOMI */}
       <TouchableOpacity
         onPress={handleScanXiaomiScale}
         disabled={isScanningScale}
@@ -191,13 +229,13 @@ export default function HealthMenu({ colors, onClose }) {
         }}
       >
         <Text style={{ color: '#ffffff', fontWeight: 'bold' }}>
-          {isScanningScale ? '⏳ A PROCURAR BALANÇA...' : '⚖️ LER BALANÇA XIAOMI'}
+          {isScanningScale ? '⏳ A LER BALANÇA...' : '⚖️ LER BALANÇA XIAOMI'}
         </Text>
       </TouchableOpacity>
 
-      {scaleData && (
-        <Text style={{ color: '#4ade80', fontSize: 12, textAlign: 'center', marginTop: 8 }}>
-          ✓ Dispositivo: {scaleData.name}
+      {scaleStatus !== '' && (
+        <Text style={{ color: scaleWeight ? '#4ade80' : '#cbd5e1', fontSize: 13, textAlign: 'center', marginTop: 8, fontWeight: scaleWeight ? 'bold' : 'normal' }}>
+          {scaleStatus}
         </Text>
       )}
     </View>
