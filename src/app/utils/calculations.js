@@ -59,6 +59,24 @@ export const calculate1MileRunVo2Max = (timeSec, profile) => {
   return Math.max(15, Math.min(85, Math.round(vo2 * 10) / 10));
 };
 
+// --- MELHOR TEMPO REGISTADO NO HISTÓRICO PARA UM DADO EXERCÍCIO/SESSÃO ---
+// Recebe a lista de histórico e o título exato do exercício (o mesmo texto
+// guardado em cada registo — ver "title" em autoFinishExercise, em index.js)
+// e devolve o menor tempo (em segundos) já registado para esse título, ou
+// null se ainda não houver nenhum registo. Usado para mostrar "melhor tempo"
+// nos exercícios de caminhada/desafios e nas sessões do plano 0 aos 5K, e
+// para decidir se um novo recorde pessoal foi batido no fim de um exercício.
+export const getBestTimeForTitle = (history = [], title) => {
+  if (!title) return null;
+  const matching = (history || []).filter((item) => item.title === title);
+  if (matching.length === 0) return null;
+  const times = matching
+    .map((item) => parseInt(item.timeSec, 10))
+    .filter((sec) => !Number.isNaN(sec) && sec > 0);
+  if (times.length === 0) return null;
+  return Math.min(...times);
+};
+
 // --- GERAÇÃO DA TIMELINE DE UMA SESSÃO DO PROGRAMA 0 AOS 5K ---
 // O aquecimento e o arrefecimento fazem sempre parte da timeline gerada; saltá-los
 // passou a ser uma ação em tempo real dentro da sessão (ver skipCurrentPhase em index.js),

@@ -3,7 +3,15 @@
 // Nada neste ficheiro é importado fora de components/menus/HealthMenu.js,
 // para manter a evolução deste menu separada do resto da app já estabilizada.
 // ============================================================================
-import { initialize, getGrantedPermissions, requestPermission, readRecords } from 'react-native-health-connect';
+import {
+  initialize,
+  getGrantedPermissions,
+  requestPermission,
+  readRecords,
+  getSdkStatus,
+  SdkAvailabilityStatus,
+} from 'react-native-health-connect';
+import { logEvent } from './debugLog';
 
 const HEALTH_CONNECT_PERMISSIONS = [
   { accessType: 'read', recordType: 'ActiveCaloriesBurned' },
@@ -71,18 +79,39 @@ const intervalsOverlap = (aStart, aEnd, bStart, bEnd) => aStart < bEnd && bStart
  */
 export const fetchGoogleFitCaloriesToday = async (excludeIntervals = []) => {
   try {
+    // Diagnóstico: estado do SDK do Health Connect antes de tudo. Isto ajuda a
+    // perceber se o problema é o dispositivo não ter o Health Connect instalado
+    // / atualizado, o que é a causa mais comum de falha silenciosa.
+    try {
+      if (typeof getSdkStatus === 'function') {
+        const sdkStatus = await getSdkStatus();
+        const statusLabel =
+          SdkAvailabilityStatus && typeof sdkStatus === 'number'
+            ? Object.keys(SdkAvailabilityStatus).find((k) => SdkAvailabilityStatus[k] === sdkStatus) || sdkStatus
+            : sdkStatus;
+        logEvent('GoogleFit', 'Estado do SDK Health Connect', { sdkStatus: statusLabel });
+      }
+    } catch (sdkErr) {
+      logEvent('GoogleFit', 'Não foi possível obter o estado do SDK (getSdkStatus)', sdkErr);
+    }
+
     const isInitialized = await initialize();
+    logEvent('GoogleFit', 'initialize() concluído', { isInitialized });
     if (!isInitialized) {
+      logEvent('GoogleFit', 'initialize() devolveu false — Health Connect indisponível ou não configurado nativamente.');
       return { totalCalories: 0, available: false, error: 'Health Connect não está disponível neste dispositivo.' };
     }
 
     const granted = await getGrantedPermissions();
+    logEvent('GoogleFit', 'Permissões já concedidas', { granted });
     const alreadyGranted = HEALTH_CONNECT_PERMISSIONS.every((req) =>
       granted.some((g) => g.recordType === req.recordType && g.accessType === req.accessType)
     );
     if (!alreadyGranted) {
       const result = await requestPermission(HEALTH_CONNECT_PERMISSIONS);
+      logEvent('GoogleFit', 'Resultado do pedido de permissão', { result });
       if (!result || result.length === 0) {
+        logEvent('GoogleFit', 'Permissão recusada ou vazia — utilizador não autorizou o acesso.');
         return { totalCalories: 0, available: false, error: 'Permissão do Google Fit / Health Connect recusada.' };
       }
     }
@@ -97,6 +126,7 @@ export const fetchGoogleFitCaloriesToday = async (excludeIntervals = []) => {
         endTime: now.toISOString(),
       },
     });
+    logEvent('GoogleFit', 'readRecords concluído', { totalRegistosLidos: response?.records?.length ?? 0 });
 
     const records = response?.records || [];
     let totalCalories = 0;
@@ -117,6 +147,10 @@ export const fetchGoogleFitCaloriesToday = async (excludeIntervals = []) => {
 
     return { totalCalories: Math.round(totalCalories), available: true, error: null };
   } catch (error) {
+    // Diagnóstico detalhado no relatório de erros (mensagem/código reais do
+    // erro nativo), mas a mensagem mostrada na app mantém-se simples, como já
+    // acontecia — para não mudar o comportamento visível existente.
+    logEvent('GoogleFit', 'Exceção ao comunicar com o Google Fit / Health Connect', error);
     return { totalCalories: 0, available: false, error: 'Erro ao ler dados do Google Fit.' };
   }
 };

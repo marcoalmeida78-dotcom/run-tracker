@@ -1,5 +1,6 @@
 import { Text, TouchableOpacity, View } from 'react-native';
 import { RUN_PROGRAM_LEVELS } from '../../constants/runProgram';
+import { formatHMS, getBestTimeForTitle } from '../../utils/calculations';
 
 export default function RunProgramMenu({
   styles,
@@ -9,6 +10,7 @@ export default function RunProgramMenu({
   activeLevelAccordion,
   onToggleLevelAccordion,
   onSelectProgramSession,
+  history,
 }) {
   return (
     <View style={styles.accordionBodyGrid}>
@@ -47,16 +49,24 @@ export default function RunProgramMenu({
                     const globalIdx = index * 3 + sIdx;
                     const isRecommendedSess = globalIdx === currentSessionIndex;
                     const isDoneSess = completedSessions.includes(globalIdx);
+                    // Melhor tempo já registado no histórico para esta sessão em concreto
+                    // (mesmo título usado ao guardar o treino — ver launchProgramSession em index.js).
+                    const sessionTitle = `Corrida: ${lvl.title} - ${sess}`;
+                    const bestSessionSec = getBestTimeForTitle(history, sessionTitle);
                     return (
-                      <TouchableOpacity
-                        key={sIdx}
-                        style={[styles.sessBtn, isDoneSess && styles.sessBtnDone, isRecommendedSess && styles.sessBtnRecommended]}
-                        onPress={() => onSelectProgramSession(globalIdx)}
-                      >
-                        <Text style={[styles.sessBtnText, isDoneSess && styles.sessBtnTextDone, isRecommendedSess && styles.sessBtnTextRecommended]}>
-                          {sess} {isRecommendedSess ? '★' : isDoneSess ? '✓' : ''}
-                        </Text>
-                      </TouchableOpacity>
+                      <View key={sIdx} style={styles.sessBtnColumn}>
+                        <TouchableOpacity
+                          style={[styles.sessBtn, styles.sessBtnInColumn, isDoneSess && styles.sessBtnDone, isRecommendedSess && styles.sessBtnRecommended]}
+                          onPress={() => onSelectProgramSession(globalIdx)}
+                        >
+                          <Text style={[styles.sessBtnText, isDoneSess && styles.sessBtnTextDone, isRecommendedSess && styles.sessBtnTextRecommended]}>
+                            {sess} {isRecommendedSess ? '★' : isDoneSess ? '✓' : ''}
+                          </Text>
+                        </TouchableOpacity>
+                        {bestSessionSec !== null && (
+                          <Text style={styles.sessionBestTimeText}>🏆 {formatHMS(bestSessionSec)}</Text>
+                        )}
+                      </View>
                     );
                   })}
                 </View>

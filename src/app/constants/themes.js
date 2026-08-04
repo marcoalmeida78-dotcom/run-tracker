@@ -44,7 +44,15 @@ export const THEMES = {
     COLOR_PRIMARY_BG: 'rgba(43, 58, 74, 0.55)',
     COLOR_SECONDARY: 'rgba(255, 255, 255, 0.75)',
     COLOR_DIVIDER: 'rgba(200, 215, 227, 0.45)',
-    COLOR_LIME_ENERGY: '#6BA4C8',
+    // Ajustado para melhorar a legibilidade dos textos azuis deste tema (ex:
+    // números "01/02/03", "melhor tempo", ligações no menu Saúde): o tom
+    // anterior (#6BA4C8) era demasiado próximo, em matiz e claridade, do fundo
+    // "vidro" claro e azulado usado pelos cartões (COLOR_BG_MAIN/COLOR_CARD_BG),
+    // o que fazia o texto misturar-se com o fundo em certas zonas da imagem.
+    // Este azul é mais saturado/vivo, destacando-se tanto sobre os cartões
+    // escuros (COLOR_PRIMARY_BG) como sobre os cartões claros "vidro fosco".
+    // Só este tema foi alterado — os restantes esquemas de cores mantêm-se.
+    COLOR_LIME_ENERGY: '#2E86AB',
     COLOR_ACCENT_TEXT: '#2B3A4A',
     COLOR_RED_ACCENT: '#E07A5F',
   },

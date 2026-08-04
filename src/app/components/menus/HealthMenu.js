@@ -21,6 +21,7 @@ import {
 } from 'react-native';
 import { BleManager } from 'react-native-ble-plx';
 import { calculateBMR, computeDailyEnergySummary } from '../../utils/healthCalculations';
+import { logEvent } from '../../utils/debugLog';
 
 const SCALE_HISTORY_KEY = '@health_scale_history';
 const SCAN_TIMEOUT_MS = 25000;
@@ -196,12 +197,14 @@ export default function HealthMenu({ colors, profile, history, onSaveProfile, on
 
     const hasPermission = await requestBluetoothPermissions();
     if (!hasPermission) {
+      logEvent('BalançaXiaomi', 'Permissão de Bluetooth/Localização recusada pelo utilizador.');
       Alert.alert('Permissão Necessária', 'É preciso permitir o Bluetooth e a Localização para procurar a balança.');
       return;
     }
 
     const manager = getBleManager();
     const bleState = await manager.state();
+    logEvent('BalançaXiaomi', 'Estado do Bluetooth antes de procurar', { bleState });
     if (bleState !== 'PoweredOn') {
       Alert.alert('Bluetooth Desligado', 'Ativa o Bluetooth do telemóvel e tenta novamente.');
       return;
@@ -210,9 +213,11 @@ export default function HealthMenu({ colors, profile, history, onSaveProfile, on
     setLiveReading(null);
     setScanStatus('scanning');
     setStatusMessage('A comunicar com a balança... sobe para a balança agora.');
+    logEvent('BalançaXiaomi', 'Início da procura por dispositivos Bluetooth.');
 
     manager.startDeviceScan(null, { allowDuplicates: true }, (error, device) => {
       if (error) {
+        logEvent('BalançaXiaomi', 'Erro devolvido pelo startDeviceScan', error);
         setScanStatus('error');
         setStatusMessage('Erro ao procurar por Bluetooth.');
         stopScan();
@@ -224,19 +229,28 @@ export default function HealthMenu({ colors, profile, history, onSaveProfile, on
       const uuidMatches = device.serviceUUIDs?.some((u) => u.toLowerCase().includes(BODY_COMPOSITION_UUID_FRAGMENT));
       if (!nameMatches && !uuidMatches) return;
 
+      logEvent('BalançaXiaomi', 'Dispositivo compatível encontrado', { name: device.name, id: device.id });
+
       const serviceDataMap = device.serviceData || {};
       const rawKey = Object.keys(serviceDataMap).find((k) => k.toLowerCase().includes(BODY_COMPOSITION_UUID_FRAGMENT));
       const rawPayload = rawKey ? serviceDataMap[rawKey] : Object.values(serviceDataMap)[0];
-      if (!rawPayload) return;
+      if (!rawPayload) {
+        logEvent('BalançaXiaomi', 'Dispositivo encontrado mas sem serviceData legível.');
+        return;
+      }
 
       const parsed = parseXiaomiPacket(rawPayload);
-      if (!parsed) return;
+      if (!parsed) {
+        logEvent('BalançaXiaomi', 'Falha ao descodificar o pacote recebido da balança.');
+        return;
+      }
 
       // Atualiza sempre o peso "ao vivo" enquanto a balança ainda está a estabilizar.
       setLiveReading(parsed);
       setStatusMessage(parsed.isStabilized ? 'Peso estabilizado ✅' : 'A ler... mantém-te parado na balança.');
 
       if (parsed.isStabilized) {
+        logEvent('BalançaXiaomi', 'Peso estabilizado e guardado', { weight: parsed.weight, unit: parsed.unit });
         stopScan();
         setScanStatus('found');
         saveScaleReading(parsed);
@@ -247,6 +261,7 @@ export default function HealthMenu({ colors, profile, history, onSaveProfile, on
       stopScan();
       setScanStatus((current) => {
         if (current === 'scanning') {
+          logEvent('BalançaXiaomi', 'Tempo limite de procura atingido sem encontrar a balança.');
           setStatusMessage('Tempo limite atingido. A balança não foi encontrada — tenta novamente.');
           return 'idle';
         }

@@ -113,6 +113,7 @@ export default function MainScreen({
           activeLevelAccordion={activeLevelAccordion}
           onToggleLevelAccordion={onToggleLevelAccordion}
           onSelectProgramSession={onSelectProgramSession}
+          history={history}
         />
       )}
 
@@ -168,6 +169,15 @@ export default function MainScreen({
         </View>
         <Text style={styles.recommendationTextDark}>{history.length} treinos registados no total</Text>
       </TouchableOpacity>
+
+      {activeMenu === 'historico' && (
+        <HistoryMenu
+          styles={styles}
+          onClose={() => onToggleAccordion('historico')}
+          history={history}
+          onDeleteHistoryItem={onDeleteHistoryItem}
+        />
+      )}
 
       {/* --- SAÚDE & METABOLISMO (menu isolado: ver components/menus/HealthMenu.js) --- */}
       <TouchableOpacity

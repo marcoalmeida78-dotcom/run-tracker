@@ -28,6 +28,7 @@ import {
   calculate1MileRunVo2Max,
   calculateRockportVo2Max,
   generateTimeline,
+  getBestTimeForTitle,
 } from './utils/calculations';
 
 import AppModals from './components/modals/AppModals';
@@ -867,6 +868,19 @@ export default function App() {
     }
     playAudio(finishMessage);
 
+    // --- Melhor tempo pessoal: verifica ANTES de guardar o novo registo se o
+    // tempo agora conseguido bate o melhor tempo já existente no histórico
+    // para este mesmo título (caminhadas, desafios e sessões do plano 0 aos
+    // 5K usam todos o mesmo mecanismo, já que "title" identifica sempre o
+    // exercício/sessão exato). Se bater, soma-se um áudio extra de parabéns
+    // à fila (toca a seguir à mensagem de fim, sem interromper nada).
+    const previousBestSec = getBestTimeForTitle(history, title);
+    const isNewPersonalBest = previousBestSec !== null && finalSec > 0 && finalSec < previousBestSec;
+    if (isNewPersonalBest) {
+      Vibration.vibrate([200, 100, 200, 100, 200]);
+      playAudio('Novo recorde pessoal! Bateste o teu melhor tempo anterior para este exercício. Parabéns!');
+    }
+
     const newRecord = {
       id: Date.now().toString(),
       title,
@@ -1016,6 +1030,7 @@ export default function App() {
           onCancel={cancelExercise}
           onSkipPhase={skipCurrentPhase}
           noSignalAlert={noSignalAlert}
+          bestTimeSec={exerciseType !== 'run_program' ? getBestTimeForTitle(history, exerciseTitle) : null}
         />
       ) : (
         <MainScreen

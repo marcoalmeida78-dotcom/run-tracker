@@ -1,6 +1,7 @@
-import { useRef } from 'react';
-import { PanResponder, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, PanResponder, Share, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { THEMES } from '../../constants/themes';
+import { clearDebugLog, formatDebugLogAsText, getDebugLog } from '../../utils/debugLog';
 
 // Slider simples (sem dependências externas) para ajustar a opacidade do
 // "nevoeiro" sobre a imagem de fundo. Arrasta-se o polegar ou toca-se
@@ -61,6 +62,84 @@ function OpacitySlider({ styles, value, onChange }) {
       </View>
       <View style={[styles.sliderThumb, { left: `${value * 100}%` }]} pointerEvents="none" />
     </View>
+  );
+}
+
+// Secção de diagnóstico: mostra o registo interno de eventos/erros (ex: balança
+// Xiaomi, Google Fit) para que possa ser copiado e partilhado ao pedir ajuda.
+// É totalmente isolada — não lê nem escreve em nenhum outro estado da app.
+function DebugReportSection({ styles }) {
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+
+  const loadLog = async () => {
+    setLoading(true);
+    const log = await getDebugLog();
+    setEntries(log);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    loadLog();
+  }, []);
+
+  const handleShare = async () => {
+    const text = formatDebugLogAsText(entries);
+    try {
+      await Share.share({ message: text });
+    } catch (e) {}
+  };
+
+  const handleClear = () => {
+    Alert.alert('Limpar Registo', 'Tem a certeza que deseja apagar todo o relatório de diagnóstico?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Limpar',
+        style: 'destructive',
+        onPress: async () => {
+          await clearDebugLog();
+          setEntries([]);
+        },
+      },
+    ]);
+  };
+
+  return (
+    <>
+      <View style={styles.divider} />
+      <Text style={styles.sectionSubTitle}>RELATÓRIO DE ERROS E DIAGNÓSTICO</Text>
+      <Text style={styles.tileSubDark}>
+        Regista automaticamente o que se passa em funcionalidades como a balança Xiaomi e o Google
+        Fit, para ajudar a perceber falhas. Usa "Partilhar" para enviar o texto.
+      </Text>
+
+      <TouchableOpacity style={styles.itemBtn} onPress={() => { setExpanded(!expanded); if (!expanded) loadLog(); }}>
+        <Text style={styles.itemBtnText}>
+          {expanded ? '▲ Esconder' : '▼ Ver'} registo ({loading ? '...' : entries.length} eventos)
+        </Text>
+      </TouchableOpacity>
+
+      {expanded && (
+        <View style={styles.accordionBodyGrid}>
+          <Text style={{ color: styles.itemBtnText?.color, fontSize: 11, lineHeight: 16 }}>
+            {formatDebugLogAsText(entries)}
+          </Text>
+        </View>
+      )}
+
+      <View style={{ flexDirection: 'row', marginTop: 8, gap: 8 }}>
+        <TouchableOpacity style={[styles.itemBtn, { flex: 1, marginBottom: 0 }]} onPress={loadLog}>
+          <Text style={styles.itemBtnText}>🔄 Atualizar</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.itemBtn, { flex: 1, marginBottom: 0 }]} onPress={handleShare}>
+          <Text style={styles.itemBtnText}>📤 Partilhar</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.itemBtn, { flex: 1, marginBottom: 0 }]} onPress={handleClear}>
+          <Text style={styles.itemBtnText}>🗑️ Limpar</Text>
+        </TouchableOpacity>
+      </View>
+    </>
   );
 }
 
@@ -159,6 +238,8 @@ export default function SettingsMenu({
           );
         })}
       </View>
+
+      <DebugReportSection styles={styles} />
 
       <View style={styles.divider} />
       <TouchableOpacity style={styles.dangerBtn} onPress={onResetAllData}>

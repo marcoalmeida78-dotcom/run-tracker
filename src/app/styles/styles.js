@@ -56,6 +56,14 @@ export const getStyles = (colors) => StyleSheet.create({
   sessBtnText: { fontSize: 11, fontWeight: '600', color: colors.COLOR_PRIMARY },
   sessBtnTextDone: { color: colors.COLOR_ACCENT_TEXT },
   sessBtnTextRecommended: { fontWeight: '800' },
+  // Coluna que envolve cada botão de sessão + o seu "melhor tempo" por baixo,
+  // sem alterar o espaçamento/alinhamento em linha que já existia (sessionList).
+  sessBtnColumn: { flex: 1, marginHorizontal: 2 },
+  sessBtnInColumn: { marginHorizontal: 0, width: '100%' },
+  sessionBestTimeText: { fontSize: 9, fontWeight: '700', color: colors.COLOR_SECONDARY, textAlign: 'center', marginTop: 3 },
+  // Texto de "melhor tempo" mostrado durante um exercício ativo (caminhadas/desafios).
+  bestTimeText: { fontSize: 12, fontWeight: '700', color: colors.COLOR_SECONDARY, textAlign: 'center', marginTop: 4 },
+  bestTimeHighlight: { color: colors.COLOR_PRIMARY, fontWeight: '900' },
   bentoHeroBottom: { backgroundColor: colors.COLOR_CARD_BG, borderRadius: 20, padding: 18, marginBottom: 12, borderWidth: 1, borderColor: colors.COLOR_DIVIDER },
   cardHeaderTitleDark: { color: colors.COLOR_PRIMARY, fontWeight: '800', fontSize: 14, letterSpacing: 1 },
   recommendationTextDark: { color: colors.COLOR_SECONDARY, fontSize: 13, fontWeight: '600', marginTop: 4 },

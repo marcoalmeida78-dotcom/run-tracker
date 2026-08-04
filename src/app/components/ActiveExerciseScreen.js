@@ -26,6 +26,7 @@ export default function ActiveExerciseScreen({
   onCancel,
   onSkipPhase,
   noSignalAlert,
+  bestTimeSec,
 }) {
   // Ponto 2: Cálculo da Contagem Decrescente para o Desafio Morte Súbita
   const currentSDBlock = SUDDEN_DEATH_BLOCKS[suddenDeathBlock - 1];
@@ -45,6 +46,14 @@ export default function ActiveExerciseScreen({
 
       <View style={styles.headerContainerActive}>
         <Text style={styles.activeTitle}>{exerciseTitle}</Text>
+        {/* Melhor tempo já registado no histórico para este exercício (caminhadas/desafios) */}
+        {exerciseType !== 'run_program' && (
+          <Text style={styles.bestTimeText}>
+            {bestTimeSec !== null && bestTimeSec !== undefined
+              ? <>🏆 Melhor tempo: <Text style={styles.bestTimeHighlight}>{formatHMS(bestTimeSec)}</Text></>
+              : 'Ainda não tens um melhor tempo registado para este exercício.'}
+          </Text>
+        )}
       </View>
 
       <View style={styles.mapContainer}>
