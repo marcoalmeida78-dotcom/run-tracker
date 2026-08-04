@@ -26,19 +26,13 @@
         "ACCESS_BACKGROUND_LOCATION",
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
         "ACCESS_FINE_LOCATION",
         "VIBRATE",
         "WAKE_LOCK",
         "POST_NOTIFICATIONS",
         "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
-        "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_BACKGROUND_LOCATION",
-        "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_LOCATION",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.health.READ_ACTIVE_CALORIES_BURNED"
       ]
     },
     "plugins": [
@@ -78,9 +72,7 @@
           }
         }
       ],
-      "react-native-ble-plx",
-      "react-native-health-connect",
-      "expo-build-properties"
+      "./plugins/withHealthConnectFix.js"
     ],
     "extra": {
       "eas": {
