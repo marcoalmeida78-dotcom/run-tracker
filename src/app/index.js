@@ -30,6 +30,13 @@ import {
   generateTimeline,
   getBestTimeForTitle,
 } from './utils/calculations';
+import {
+  calculateCooperVo2Max,
+  calculateFcMaxTanaka,
+  classifyCooperDistance,
+  classifyHeartRateZone,
+  getBestCooperClassification,
+} from './utils/cooperTest';
 
 import AppModals from './components/modals/AppModals';
 import MainScreen from './components/MainScreen';
@@ -87,6 +94,13 @@ export default function App() {
 
   const [showEsquinaModal, setShowEsquinaModal] = useState(false);
   const esquinaTargetMultiplierRef = useRef(1);
+
+  // --- NOVO: Modal de resultado do Cooper/Rockport (batimentos → VO2 Máx, FC Máx, zona) ---
+  const [showTestResultModal, setShowTestResultModal] = useState(false);
+  const [pendingTestTitle, setPendingTestTitle] = useState('');
+  const [heartRateInput, setHeartRateInput] = useState('');
+  const [testResultData, setTestResultData] = useState(null);
+  const pendingFinishRef = useRef(null); // { type, title, finalSec, finalDist, finalSpeed, config }
 
   // --- NOVO: Estado de perda de GPS / Rede ---
   const [noSignalAlert, setNoSignalAlert] = useState(false);
@@ -853,13 +867,40 @@ export default function App() {
     isFinishingRef.current = true;
     stopAndCleanupExercise();
     Vibration.vibrate([500, 300, 500]);
-    
+
+    // --- Melhor tempo pessoal: verifica ANTES de guardar o novo registo se o
+    // tempo agora conseguido bate o melhor tempo já existente no histórico
+    // para este mesmo título (caminhadas, desafios e sessões do plano 0 aos
+    // 5K usam todos o mesmo mecanismo, já que "title" identifica sempre o
+    // exercício/sessão exato). Se bater, soma-se um áudio extra de parabéns
+    // à fila (toca a seguir à mensagem de fim, sem interromper nada). Isto
+    // acontece sempre, incluindo Cooper/Rockport, antes de se desviarem para
+    // o fluxo de batimentos cardíacos abaixo.
+    const previousBestSec = getBestTimeForTitle(history, title);
+    const isNewPersonalBest = previousBestSec !== null && finalSec > 0 && finalSec < previousBestSec;
+
+    // --- Teste de Cooper e Desafio Rockport: em vez de guardar já o registo,
+    // pede-se primeiro os batimentos cardíacos (modal em AppModals.js), para
+    // calcular o VO2 Máx (Rockport precisa mesmo dos batimentos; Cooper usa
+    // só a distância, mas os batimentos servem para a zona de intensidade).
+    // O registo só é guardado depois, em handleSubmitHeartRate/handleSkipHeartRate.
+    if (type === 'walk_rockport' || type === 'challenge_cooper') {
+      playAudio('Parabéns! Completou o treino com sucesso!');
+      if (isNewPersonalBest) {
+        Vibration.vibrate([200, 100, 200, 100, 200]);
+        playAudio('Novo recorde pessoal! Bateste o teu melhor tempo anterior para este exercício. Parabéns!');
+      }
+      pendingFinishRef.current = { type, title, finalSec, finalDist, finalSpeed, config };
+      setPendingTestTitle(title);
+      setHeartRateInput('');
+      setTestResultData(null);
+      setShowTestResultModal(true);
+      return;
+    }
+
     let vo2Val = null;
     let finishMessage = 'Parabéns! Completou o treino com sucesso!';
-    if (type === 'walk_rockport') {
-      vo2Val = calculateRockportVo2Max(finalSec, finalDist, profile);
-      setVo2MaxResult(vo2Val);
-    } else if (type === 'challenge_1.5m') {
+    if (type === 'challenge_1.5m') {
       vo2Val = calculate15MilesVo2Max(finalSec);
       setVo2MaxResult(vo2Val);
     } else if (type === 'challenge_1milha') {
@@ -868,14 +909,6 @@ export default function App() {
     }
     playAudio(finishMessage);
 
-    // --- Melhor tempo pessoal: verifica ANTES de guardar o novo registo se o
-    // tempo agora conseguido bate o melhor tempo já existente no histórico
-    // para este mesmo título (caminhadas, desafios e sessões do plano 0 aos
-    // 5K usam todos o mesmo mecanismo, já que "title" identifica sempre o
-    // exercício/sessão exato). Se bater, soma-se um áudio extra de parabéns
-    // à fila (toca a seguir à mensagem de fim, sem interromper nada).
-    const previousBestSec = getBestTimeForTitle(history, title);
-    const isNewPersonalBest = previousBestSec !== null && finalSec > 0 && finalSec < previousBestSec;
     if (isNewPersonalBest) {
       Vibration.vibrate([200, 100, 200, 100, 200]);
       playAudio('Novo recorde pessoal! Bateste o teu melhor tempo anterior para este exercício. Parabéns!');
@@ -916,6 +949,95 @@ export default function App() {
         setActiveLevelAccordion(Math.floor(nextRec / 3) + 1);
       }
     }
+  };
+
+  // --- Conclui o registo do Cooper/Rockport depois de o utilizador introduzir
+  // (ou saltar) os batimentos cardíacos. Espelha exatamente a construção do
+  // "newRecord" feita acima em autoFinishExercise, apenas com os campos extra
+  // (heartRate, vo2Max, fcMax, zona, classificação do Cooper).
+  const finalizePendingTest = async (heartRateBpm) => {
+    const pending = pendingFinishRef.current;
+    if (!pending) return;
+    const { type, title, finalSec, finalDist, finalSpeed, config } = pending;
+
+    const fcMax = calculateFcMaxTanaka(profile.age);
+    let vo2Val = null;
+    let cooperClassification = null;
+
+    if (type === 'walk_rockport') {
+      vo2Val = calculateRockportVo2Max(finalSec, heartRateBpm, profile);
+    } else if (type === 'challenge_cooper') {
+      const distanceM = finalDist * 1000;
+      vo2Val = calculateCooperVo2Max(distanceM);
+      cooperClassification = classifyCooperDistance(distanceM, parseFloat(profile.age), profile.gender);
+    }
+
+    const zone = heartRateBpm ? classifyHeartRateZone(heartRateBpm, fcMax) : null;
+
+    if (zone) {
+      playAudio(
+        `Durante este exercício, andaste em média na Zona ${zone.zone ?? ''}: ${zone.label}.`
+      );
+    }
+
+    const newRecord = {
+      id: Date.now().toString(),
+      title,
+      date: new Date().toLocaleDateString('pt-PT'),
+      startTime: startTimeRef.current ? new Date(startTimeRef.current).toISOString() : null,
+      endTime: new Date().toISOString(),
+      timeSec: finalSec,
+      distanceKm: finalDist.toFixed(2),
+      pace: finalDist > 0 ? (finalSec / 60 / finalDist).toFixed(2) : '0.00',
+      calories: calculateCalories(finalDist, finalSec, profile.weight),
+      speed: finalSpeed,
+      vo2Max: vo2Val,
+      heartRate: heartRateBpm || null,
+      zone: zone ? zone.zone : null,
+      cooperClassification: cooperClassification ? cooperClassification.label : null,
+    };
+
+    const updatedHistory = [newRecord, ...history];
+    setHistory(updatedHistory);
+    updateRecordsFromHistory(updatedHistory);
+    await AsyncStorage.setItem('@user_history', JSON.stringify(updatedHistory));
+
+    if (type === 'run_program' && config?.sessionIndex !== undefined) {
+      const doneIdx = config.sessionIndex;
+      let updatedCompleted = [...new Set([...completedSessions, doneIdx])];
+      setCompletedSessions(updatedCompleted);
+      await AsyncStorage.setItem('@completed_sessions', JSON.stringify(updatedCompleted));
+
+      if (config.isProgression) {
+        const nextRec = Math.min(74, doneIdx + 1);
+        setCurrentSessionIndex(nextRec);
+        await AsyncStorage.setItem('@current_session_index', nextRec.toString());
+        setActiveLevelAccordion(Math.floor(nextRec / 3) + 1);
+      }
+    }
+
+    setTestResultData({ vo2Max: vo2Val, fcMax, zone, cooperClassification });
+    pendingFinishRef.current = null;
+  };
+
+  const handleSubmitHeartRate = () => {
+    const bpm = parseInt(heartRateInput, 10);
+    if (!bpm || bpm <= 0 || bpm > 250) {
+      Alert.alert('Valor inválido', 'Introduz um valor de batimentos cardíacos válido (bpm).');
+      return;
+    }
+    finalizePendingTest(bpm);
+  };
+
+  const handleSkipHeartRate = () => {
+    finalizePendingTest(null);
+  };
+
+  const handleCloseTestResult = () => {
+    setShowTestResultModal(false);
+    setTestResultData(null);
+    setHeartRateInput('');
+    setPendingTestTitle('');
   };
 
   const handleDeleteHistoryItem = (idToDelete) => {
@@ -1005,6 +1127,14 @@ export default function App() {
         showEsquinaModal={showEsquinaModal}
         onContinueEsquinaChallenge={handleContinueEsquinaChallenge}
         onFinishEsquinaChallenge={handleFinishEsquinaChallenge}
+        showTestResultModal={showTestResultModal}
+        pendingTestTitle={pendingTestTitle}
+        heartRateInput={heartRateInput}
+        onChangeHeartRateInput={setHeartRateInput}
+        onSubmitHeartRate={handleSubmitHeartRate}
+        onSkipHeartRate={handleSkipHeartRate}
+        testResultData={testResultData}
+        onCloseTestResult={handleCloseTestResult}
       />
 
       {isExercising ? (
@@ -1031,6 +1161,7 @@ export default function App() {
           onSkipPhase={skipCurrentPhase}
           noSignalAlert={noSignalAlert}
           bestTimeSec={exerciseType !== 'run_program' ? getBestTimeForTitle(history, exerciseTitle) : null}
+          bestCooperClassification={exerciseType === 'challenge_cooper' ? getBestCooperClassification(history, profile) : null}
         />
       ) : (
         <MainScreen

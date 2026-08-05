@@ -31,7 +31,12 @@ export const calculateCalories = (distKm, timeSec, weightKg = 70) => {
 };
 
 // --- ESTIMATIVAS DE VO2 MÁX ---
-export const calculateRockportVo2Max = (timeSec, distKm, profile) => {
+// Fórmula de Kline et al. (1987) para o Rockport Walking Test — precisa
+// mesmo dos batimentos cardíacos (não da distância, que é sempre 1609m fixos
+// neste desafio). Sem batimentos, não há forma válida de calcular isto — por
+// isso devolve null em vez de inventar um número.
+export const calculateRockportVo2Max = (timeSec, heartRate, profile) => {
+  if (!heartRate || heartRate <= 0) return null;
   const weightKg = parseFloat(profile.weight) || 70;
   const age = parseFloat(profile.age) || 30;
   const gender = profile.gender || 'masculino';
@@ -39,7 +44,7 @@ export const calculateRockportVo2Max = (timeSec, distKm, profile) => {
   const weightLbs = weightKg * 2.20462;
   let baseVo2 =
     132.853 - (0.0769 * weightLbs) - (0.3877 * age) + (gender === 'masculino' ? 6.315 : 0) -
-    (3.2649 * timeMinutes) - (0.1565 * (distKm * 1000));
+    (3.2649 * timeMinutes) - (0.1565 * heartRate);
   return Math.max(15, Math.min(85, Math.round(baseVo2 * 10) / 10));
 };
 

@@ -141,7 +141,13 @@ export default function MainScreen({
       </View>
 
       {activeMenu === 'desafios' && (
-        <ChallengesMenu styles={styles} onClose={() => onToggleAccordion('desafios')} onStartExercise={onStartExercise} />
+        <ChallengesMenu
+          styles={styles}
+          onClose={() => onToggleAccordion('desafios')}
+          onStartExercise={onStartExercise}
+          history={history}
+          profile={profile}
+        />
       )}
 
       {activeMenu === 'def' && (

@@ -1,6 +1,9 @@
 import { Text, TouchableOpacity, View } from 'react-native';
+import { getBestCooperClassification } from '../../utils/cooperTest';
 
-export default function ChallengesMenu({ styles, onClose, onStartExercise }) {
+export default function ChallengesMenu({ styles, onClose, onStartExercise, history, profile }) {
+  const bestCooper = getBestCooperClassification(history, profile);
+
   return (
     <View style={styles.accordionBodyGrid}>
       <View style={styles.submenuHeader}>
@@ -12,6 +15,7 @@ export default function ChallengesMenu({ styles, onClose, onStartExercise }) {
 
       <TouchableOpacity style={styles.itemBtn} onPress={() => onStartExercise('challenge_cooper', 'Teste de Cooper (12 min)', { targetTimeSec: 720 })}>
         <Text style={styles.itemBtnText}>Teste de Cooper (12 min)</Text>
+        {bestCooper && <Text style={styles.itemBtnSubText}>🏅 O teu melhor: {bestCooper.label}</Text>}
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.itemBtn} onPress={() => onStartExercise('challenge_1.5m', 'Desafio 1,5 Milhas (2400m)', { targetDistKm: 2.4 })}>

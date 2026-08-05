@@ -1,4 +1,4 @@
-import { Modal, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 // Agrupa todos os modais da aplicação num só sítio.
 // Cada modal é controlado por uma prop "visible*" vinda do componente principal.
@@ -22,6 +22,15 @@ export default function AppModals({
   showEsquinaModal,
   onContinueEsquinaChallenge,
   onFinishEsquinaChallenge,
+
+  showTestResultModal,
+  pendingTestTitle,
+  heartRateInput,
+  onChangeHeartRateInput,
+  onSubmitHeartRate,
+  onSkipHeartRate,
+  testResultData,
+  onCloseTestResult,
 }) {
   return (
     <>
@@ -93,6 +102,70 @@ export default function AppModals({
             <TouchableOpacity style={styles.esquinaNoBtn} onPress={onFinishEsquinaChallenge}>
               <Text style={styles.esquinaNoBtnText}>CONCLUIR TREINO ✓</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* RESULTADO DE TESTE (Cooper / Rockport): pede batimentos cardíacos no
+          fim, depois mostra VO2 Máx, FC Máx e a zona de intensidade atingida.
+          Ver utils/cooperTest.js e utils/calculations.js para as fórmulas. */}
+      <Modal visible={showTestResultModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            {!testResultData ? (
+              <>
+                <Text style={styles.modalTitle}>❤️ {pendingTestTitle}</Text>
+                <Text style={styles.modalText}>
+                  Para calcular o VO2 Máx e a zona de intensidade, introduz os teus batimentos
+                  cardíacos (bpm) agora, logo após o esforço.
+                </Text>
+                <TextInput
+                  style={styles.testResultInput}
+                  placeholder="Ex: 165"
+                  placeholderTextColor={colors.COLOR_SECONDARY}
+                  keyboardType="number-pad"
+                  value={heartRateInput}
+                  onChangeText={onChangeHeartRateInput}
+                  maxLength={3}
+                />
+                <TouchableOpacity style={styles.modalBtn} onPress={onSubmitHeartRate}>
+                  <Text style={styles.modalBtnText}>CALCULAR</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalBtn, { backgroundColor: 'transparent', marginTop: 4 }]}
+                  onPress={onSkipHeartRate}
+                >
+                  <Text style={[styles.modalBtnText, { color: colors.COLOR_PRIMARY }]}>Saltar</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={styles.modalTitle}>📊 Resultado</Text>
+                {testResultData.cooperClassification && (
+                  <Text style={styles.testResultHighlight}>{testResultData.cooperClassification.label}</Text>
+                )}
+                {testResultData.vo2Max != null && (
+                  <Text style={styles.modalText}>VO2 Máx: {testResultData.vo2Max} ml/kg/min</Text>
+                )}
+                {testResultData.fcMax != null && (
+                  <Text style={styles.modalText}>FC Máx (Tanaka): {testResultData.fcMax} bpm</Text>
+                )}
+                {testResultData.zone && (
+                  <Text style={styles.modalText}>
+                    Zona {testResultData.zone.zone ?? '-'} ({testResultData.zone.percent}% da FC Máx){'\n'}
+                    {testResultData.zone.label}
+                  </Text>
+                )}
+                {!testResultData.vo2Max && !testResultData.zone && !testResultData.cooperClassification && (
+                  <Text style={styles.modalText}>
+                    Sem dados suficientes para calcular resultados desta vez.
+                  </Text>
+                )}
+                <TouchableOpacity style={styles.modalBtn} onPress={onCloseTestResult}>
+                  <Text style={styles.modalBtnText}>OK</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
       </Modal>

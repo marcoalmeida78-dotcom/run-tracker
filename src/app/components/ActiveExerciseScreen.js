@@ -27,6 +27,7 @@ export default function ActiveExerciseScreen({
   onSkipPhase,
   noSignalAlert,
   bestTimeSec,
+  bestCooperClassification,
 }) {
   // Ponto 2: Cálculo da Contagem Decrescente para o Desafio Morte Súbita
   const currentSDBlock = SUDDEN_DEATH_BLOCKS[suddenDeathBlock - 1];
@@ -46,13 +47,22 @@ export default function ActiveExerciseScreen({
 
       <View style={styles.headerContainerActive}>
         <Text style={styles.activeTitle}>{exerciseTitle}</Text>
-        {/* Melhor tempo já registado no histórico para este exercício (caminhadas/desafios) */}
-        {exerciseType !== 'run_program' && (
+        {/* Teste de Cooper: os 12 min são fixos, por isso "melhor tempo" não
+            faz sentido aqui — mostra antes a melhor classificação alcançada. */}
+        {exerciseType === 'challenge_cooper' ? (
           <Text style={styles.bestTimeText}>
-            {bestTimeSec !== null && bestTimeSec !== undefined
-              ? <>🏆 Melhor tempo: <Text style={styles.bestTimeHighlight}>{formatHMS(bestTimeSec)}</Text></>
-              : 'Ainda não tens um melhor tempo registado para este exercício.'}
+            {bestCooperClassification
+              ? <>🏅 O teu melhor: <Text style={styles.bestTimeHighlight}>{bestCooperClassification.label}</Text></>
+              : 'Ainda não tens uma classificação registada neste teste.'}
           </Text>
+        ) : (
+          exerciseType !== 'run_program' && (
+            <Text style={styles.bestTimeText}>
+              {bestTimeSec !== null && bestTimeSec !== undefined
+                ? <>🏆 Melhor tempo: <Text style={styles.bestTimeHighlight}>{formatHMS(bestTimeSec)}</Text></>
+                : 'Ainda não tens um melhor tempo registado para este exercício.'}
+            </Text>
+          )
         )}
       </View>
 

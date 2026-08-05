@@ -28,6 +28,7 @@ import { LineChart } from 'react-native-chart-kit';
 import { calculateBMR, computeDailyEnergySummary, suggestDailyWaterMl } from '../../utils/healthCalculations';
 import { classifyBMI, classifyWHR, computeBodyComposition } from '../../utils/bodyComposition';
 import { computeMovingAverageWeight, computeTrendAlert, estimateGoalProgress } from '../../utils/healthTrends';
+import { calculateFcMaxTanaka } from '../../utils/cooperTest';
 import { cancelWeighInReminder, getWeighInReminderStatus, scheduleWeighInReminder } from '../../utils/healthReminders';
 import { logEvent } from '../../utils/debugLog';
 
@@ -143,6 +144,17 @@ export default function HealthMenu({ colors, profile, history, onSaveProfile, on
 
   const bmiInfo = useMemo(() => classifyBMI(parseFloat(profile?.weight), parseFloat(profile?.height)), [profile]);
   const movingAvgWeight = useMemo(() => computeMovingAverageWeight(scaleHistory, 7), [scaleHistory]);
+  // FC Máx (Tanaka) — só depende da idade do perfil, por isso é sempre
+  // recalculada ao vivo (não precisa de estar "presa" a um teste concluído).
+  const fcMax = useMemo(() => calculateFcMaxTanaka(profile?.age), [profile]);
+  // VO2 Máx mais recente — de qualquer teste que o tenha calculado (Cooper,
+  // Rockport, ou os desafios de 1/1.5 milhas), o que for mais recente ganha.
+  const latestVo2 = useMemo(() => {
+    const withVo2 = (history || []).filter((item) => item.vo2Max != null);
+    if (withVo2.length === 0) return null;
+    const sorted = [...withVo2].sort((a, b) => Number(b.id) - Number(a.id));
+    return { value: sorted[0].vo2Max, title: sorted[0].title, date: sorted[0].date };
+  }, [history]);
   const trendAlert = useMemo(() => computeTrendAlert(scaleHistory), [scaleHistory]);
 
   // Sugestão de água diária: peso mais recente conhecido (balança > perfil) +
@@ -498,6 +510,8 @@ export default function HealthMenu({ colors, profile, history, onSaveProfile, on
     }
     if (bmiInfo) lines.push(`IMC: ${bmiInfo.bmi} (${bmiInfo.label})`);
     if (whrInfo) lines.push(`Rácio cintura-anca: ${whrInfo.whr} (${whrInfo.label})`);
+    if (latestVo2) lines.push(`VO2 Máx: ${latestVo2.value} ml/kg/min (${latestVo2.title})`);
+    if (fcMax != null) lines.push(`FC Máx (Tanaka): ${fcMax} bpm`);
     if (trendAlert) lines.push('', `Tendência: ${trendAlert.message}`);
     if (goal && goalProgress) {
       lines.push(
@@ -575,6 +589,24 @@ export default function HealthMenu({ colors, profile, history, onSaveProfile, on
           {movingAvgWeight != null && (
             <View style={s.quickStatItem}>
               <Text style={s.bmiLabel}>Média 7d: <Text style={s.bmiValue}>{movingAvgWeight} kg</Text></Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* VO2 MÁX / FC MÁX — VO2 Máx vem do teste mais recente (Cooper, Rockport,
+          etc.); FC Máx (Tanaka) é sempre calculada ao vivo a partir da idade. */}
+      {(latestVo2 || fcMax != null) && (
+        <View style={s.quickStatsRow}>
+          {latestVo2 && (
+            <View style={s.quickStatItem}>
+              <Text style={s.bmiLabel}>VO2 Máx: <Text style={s.bmiValue}>{latestVo2.value}</Text></Text>
+              <Text style={s.bmiBadge}>{latestVo2.title.split('(')[0].trim()}</Text>
+            </View>
+          )}
+          {fcMax != null && (
+            <View style={s.quickStatItem}>
+              <Text style={s.bmiLabel}>FC Máx: <Text style={s.bmiValue}>{fcMax} bpm</Text></Text>
             </View>
           )}
         </View>
