@@ -2,33 +2,51 @@
 // MENU SAÚDE & METABOLISMO — módulo isolado
 // ----------------------------------------------------------------------------
 // Este ficheiro concentra TODA a funcionalidade do menu Saúde (TMB, resumo
-// diário de calorias, Google Fit e balança Xiaomi). Não é importado por mais
-// nenhum sítio da app além do MainScreen, e não altera nenhuma lógica dos
-// outros menus. Para desligar o menu Saúde por completo, basta remover o
-// bloco correspondente no MainScreen.js — nada aqui tem de ser tocado.
+// diário de calorias, Google Fit, balança Xiaomi, composição corporal,
+// tendências, objetivo de peso, medidas corporais, lembrete de pesagem e
+// exportação de relatório). Não é importado por mais nenhum sítio da app além
+// do MainScreen, e não altera nenhuma lógica dos outros menus. Para desligar
+// o menu Saúde por completo, basta remover o bloco correspondente no
+// MainScreen.js — nada aqui tem de ser tocado.
 // ============================================================================
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Dimensions,
   PermissionsAndroid,
   Platform,
-  ScrollView,
+  Share,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { BleManager } from 'react-native-ble-plx';
-import { calculateBMR, computeDailyEnergySummary } from '../../utils/healthCalculations';
+import { LineChart } from 'react-native-chart-kit';
+import { calculateBMR, computeDailyEnergySummary, suggestDailyWaterMl } from '../../utils/healthCalculations';
+import { classifyBMI, classifyWHR, computeBodyComposition } from '../../utils/bodyComposition';
+import { computeMovingAverageWeight, computeTrendAlert, estimateGoalProgress } from '../../utils/healthTrends';
+import { cancelWeighInReminder, getWeighInReminderStatus, scheduleWeighInReminder } from '../../utils/healthReminders';
 import { logEvent } from '../../utils/debugLog';
 
 const SCALE_HISTORY_KEY = '@health_scale_history';
+const WEIGHT_GOAL_KEY = '@health_weight_goal';
+const MEASUREMENTS_KEY = '@health_body_measurements';
 const SCAN_TIMEOUT_MS = 25000;
 
 // Nomes/UUIDs conhecidos das balanças Xiaomi Mi Body Composition Scale (1 e 2).
 const SCALE_NAME_MATCH = /MIBFS|MIBCS|MI ?SCALE|XMTZC/i;
 const BODY_COMPOSITION_UUID_FRAGMENT = '181b';
+
+// Presets de hora para o lembrete diário de pesagem (mantém a UI simples,
+// sem precisar de um componente nativo de escolha de hora).
+const REMINDER_TIME_PRESETS = [
+  { label: '07:00', hour: 7, minute: 0 },
+  { label: '08:00', hour: 8, minute: 0 },
+  { label: '09:00', hour: 9, minute: 0 },
+];
 
 let bleManagerInstance = null;
 const getBleManager = () => {
@@ -120,10 +138,71 @@ export default function HealthMenu({ colors, profile, history, onSaveProfile, on
   const [scaleHistory, setScaleHistory] = useState([]);
   const [showScaleHistory, setShowScaleHistory] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
+  const [chartMetric, setChartMetric] = useState('weight'); // weight | fat | water | lean
   const scanTimeoutRef = useRef(null);
+
+  const bmiInfo = useMemo(() => classifyBMI(parseFloat(profile?.weight), parseFloat(profile?.height)), [profile]);
+  const movingAvgWeight = useMemo(() => computeMovingAverageWeight(scaleHistory, 7), [scaleHistory]);
+  const trendAlert = useMemo(() => computeTrendAlert(scaleHistory), [scaleHistory]);
+
+  // Sugestão de água diária: peso mais recente conhecido (balança > perfil) +
+  // calorias de exercício de hoje (já calculadas no resumo diário).
+  const waterSuggestion = useMemo(() => {
+    const weightKg = scaleHistory[0]?.weight ?? parseFloat(profile?.weight);
+    const exerciseKcal = (summary?.appExerciseCalories || 0) + (summary?.fitCalories || 0);
+    return suggestDailyWaterMl(weightKg, exerciseKcal);
+  }, [scaleHistory, profile, summary]);
+
+  // Últimas N pesagens (mais antiga → mais recente) prontas para o gráfico de evolução.
+  const chartEntries = useMemo(() => {
+    return [...scaleHistory]
+      .sort((a, b) => Number(a.id) - Number(b.id))
+      .slice(-15);
+  }, [scaleHistory]);
+
+  const CHART_METRICS = {
+    weight: { key: 'weight', label: 'Peso', unit: 'kg', color: () => colors?.COLOR_LIME_ENERGY || '#3b82f6' },
+    fat: { key: 'bodyFatPercent', label: 'Massa Gorda', unit: '%', color: () => colors?.COLOR_RED_ACCENT || '#ef4444' },
+    lean: { key: 'leanMassPercent', label: 'Massa Magra', unit: '%', color: () => colors?.COLOR_PRIMARY || '#22c55e' },
+    water: { key: 'bodyWaterPercent', label: 'Água Corporal', unit: '%', color: () => '#38bdf8' },
+  };
+
+  const activeChartMetric = CHART_METRICS[chartMetric];
+  const chartDataPoints = chartEntries
+    .filter((e) => e[activeChartMetric.key] != null)
+    .map((e) => Number(e[activeChartMetric.key]));
+  const chartLabels = chartEntries
+    .filter((e) => e[activeChartMetric.key] != null)
+    .map((e) => e.date.slice(0, 5)); // "dd/mm"
+
+  // --- Objetivo de peso ---
+  const [goal, setGoal] = useState(null); // { goalWeightKg, startWeightKg }
+  const [goalInput, setGoalInput] = useState('');
+  const goalProgress = useMemo(
+    () => (goal ? estimateGoalProgress(scaleHistory, goal.goalWeightKg, goal.startWeightKg) : null),
+    [scaleHistory, goal]
+  );
+
+  // --- Medidas corporais (cintura/anca) ---
+  const [measurements, setMeasurements] = useState([]);
+  const [waistInput, setWaistInput] = useState('');
+  const [hipInput, setHipInput] = useState('');
+  const [showMeasurements, setShowMeasurements] = useState(false);
+  const latestMeasurement = measurements[0] || null;
+  const whrInfo = useMemo(
+    () => (latestMeasurement ? classifyWHR(latestMeasurement.waist, latestMeasurement.hip, profile?.gender) : null),
+    [latestMeasurement, profile]
+  );
+
+  // --- Lembrete de pesagem ---
+  const [reminderStatus, setReminderStatus] = useState(null); // { hour, minute } | null
+  const [reminderBusy, setReminderBusy] = useState(false);
 
   useEffect(() => {
     loadScaleHistory();
+    loadGoal();
+    loadMeasurements();
+    loadReminderStatus();
     return () => {
       stopScan();
     };
@@ -139,6 +218,29 @@ export default function HealthMenu({ colors, profile, history, onSaveProfile, on
     }
   };
 
+  const loadGoal = async () => {
+    try {
+      const saved = await AsyncStorage.getItem(WEIGHT_GOAL_KEY);
+      setGoal(saved ? JSON.parse(saved) : null);
+    } catch (e) {
+      setGoal(null);
+    }
+  };
+
+  const loadMeasurements = async () => {
+    try {
+      const saved = await AsyncStorage.getItem(MEASUREMENTS_KEY);
+      setMeasurements(saved ? JSON.parse(saved) : []);
+    } catch (e) {
+      setMeasurements([]);
+    }
+  };
+
+  const loadReminderStatus = async () => {
+    const status = await getWeighInReminderStatus();
+    setReminderStatus(status);
+  };
+
   const stopScan = () => {
     try {
       getBleManager().stopDeviceScan();
@@ -150,6 +252,23 @@ export default function HealthMenu({ colors, profile, history, onSaveProfile, on
   };
 
   const saveScaleReading = async (reading) => {
+    // Composição corporal: usa o peso desta pesagem + altura/idade/género do
+    // perfil + a impedância desta pesagem, comparada com as impedâncias de
+    // pesagens anteriores (para o ajuste auto-calibrado — ver bodyComposition.js).
+    // Guardamos o resultado JUNTO da pesagem (não recalculamos depois), para
+    // que o histórico fique estável mesmo que o perfil mude no futuro.
+    // Últimas 10 pesagens anteriores — mantém a auto-calibração "atual" em vez
+    // de arrastar uma média de meses/anos que dilui mudanças recentes no corpo.
+    const priorImpedances = scaleHistory.slice(0, 10).map((item) => item.impedance).filter(Boolean);
+    const composition = computeBodyComposition({
+      weightKg: reading.weight,
+      heightCm: parseFloat(profile?.height),
+      age: parseInt(profile?.age, 10),
+      gender: profile?.gender,
+      impedance: reading.impedance,
+      priorImpedances,
+    });
+
     const entry = {
       id: Date.now().toString(),
       date: new Date().toLocaleDateString('pt-PT'),
@@ -157,6 +276,7 @@ export default function HealthMenu({ colors, profile, history, onSaveProfile, on
       weight: reading.weight,
       impedance: reading.impedance,
       unit: reading.unit,
+      ...(composition || {}),
     };
     const updated = [entry, ...scaleHistory];
     setScaleHistory(updated);
@@ -270,6 +390,131 @@ export default function HealthMenu({ colors, profile, history, onSaveProfile, on
     }, SCAN_TIMEOUT_MS);
   };
 
+  // --- Objetivo de peso ---
+  const handleSaveGoal = async () => {
+    const goalWeightKg = parseFloat(goalInput.replace(',', '.'));
+    if (!goalWeightKg || goalWeightKg <= 0) {
+      Alert.alert('Peso inválido', 'Introduz um peso-objetivo válido, em kg.');
+      return;
+    }
+    const startWeightKg = scaleHistory[0]?.weight ?? parseFloat(profile?.weight) ?? goalWeightKg;
+    const newGoal = { goalWeightKg, startWeightKg, setAt: Date.now() };
+    setGoal(newGoal);
+    setGoalInput('');
+    try {
+      await AsyncStorage.setItem(WEIGHT_GOAL_KEY, JSON.stringify(newGoal));
+    } catch (e) {}
+  };
+
+  const handleClearGoal = () => {
+    Alert.alert('Remover Objetivo', 'Queres remover o teu objetivo de peso atual?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Remover',
+        style: 'destructive',
+        onPress: async () => {
+          setGoal(null);
+          await AsyncStorage.removeItem(WEIGHT_GOAL_KEY);
+        },
+      },
+    ]);
+  };
+
+  // --- Medidas corporais ---
+  const handleSaveMeasurement = async () => {
+    const waist = parseFloat(waistInput.replace(',', '.'));
+    const hip = parseFloat(hipInput.replace(',', '.'));
+    if (!waist || !hip) {
+      Alert.alert('Medidas inválidas', 'Introduz a cintura e a anca em centímetros.');
+      return;
+    }
+    const entry = {
+      id: Date.now().toString(),
+      date: new Date().toLocaleDateString('pt-PT'),
+      waist,
+      hip,
+    };
+    const updated = [entry, ...measurements];
+    setMeasurements(updated);
+    setWaistInput('');
+    setHipInput('');
+    try {
+      await AsyncStorage.setItem(MEASUREMENTS_KEY, JSON.stringify(updated));
+    } catch (e) {}
+  };
+
+  const handleDeleteMeasurement = (id) => {
+    Alert.alert('Apagar Medida', 'Eliminar este registo de medidas?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: async () => {
+          const updated = measurements.filter((item) => item.id !== id);
+          setMeasurements(updated);
+          await AsyncStorage.setItem(MEASUREMENTS_KEY, JSON.stringify(updated));
+        },
+      },
+    ]);
+  };
+
+  // --- Lembrete de pesagem ---
+  const handleSetReminder = async (hour, minute) => {
+    setReminderBusy(true);
+    const result = await scheduleWeighInReminder(hour, minute);
+    setReminderBusy(false);
+    if (!result.success) {
+      Alert.alert('Não foi possível agendar', result.error || 'Tenta novamente.');
+      return;
+    }
+    setReminderStatus({ hour, minute });
+  };
+
+  const handleCancelReminder = async () => {
+    setReminderBusy(true);
+    await cancelWeighInReminder();
+    setReminderBusy(false);
+    setReminderStatus(null);
+  };
+
+  // --- Exportar relatório ---
+  const handleExportReport = async () => {
+    const lines = [
+      '🏥 RELATÓRIO DE SAÚDE & METABOLISMO',
+      '',
+      `Data: ${new Date().toLocaleDateString('pt-PT')}`,
+    ];
+
+    if (scaleHistory[0]) {
+      lines.push('', `Peso atual: ${scaleHistory[0].weight} ${scaleHistory[0].unit}`);
+      if (movingAvgWeight != null) lines.push(`Média (7 dias): ${movingAvgWeight} kg`);
+      if (scaleHistory[0].bodyFatPercent != null) {
+        lines.push(
+          `Massa gorda: ${scaleHistory[0].bodyFatPercent}% (${scaleHistory[0].fatMassKg} kg)`,
+          `Massa magra: ${scaleHistory[0].leanMassPercent}% (${scaleHistory[0].leanMassKg} kg)`,
+          `Água corporal: ${scaleHistory[0].bodyWaterPercent}% (${scaleHistory[0].bodyWaterKg} kg)`
+        );
+      }
+    }
+    if (bmiInfo) lines.push(`IMC: ${bmiInfo.bmi} (${bmiInfo.label})`);
+    if (whrInfo) lines.push(`Rácio cintura-anca: ${whrInfo.whr} (${whrInfo.label})`);
+    if (trendAlert) lines.push('', `Tendência: ${trendAlert.message}`);
+    if (goal && goalProgress) {
+      lines.push(
+        '',
+        `Objetivo: ${goal.goalWeightKg} kg — progresso ${goalProgress.progressPercent}%` +
+          (goalProgress.etaWeeks ? ` (estimativa: ~${goalProgress.etaWeeks} semanas)` : '')
+      );
+    }
+    lines.push('', `TMB: ${summary?.bmr ?? bmrOnly} kcal`, `Gasto total hoje: ${summary?.total ?? bmrOnly} kcal`);
+    if (waterSuggestion) lines.push(`Água sugerida hoje: ${(waterSuggestion / 1000).toFixed(1)} L`);
+    lines.push('', '(Estimativas geradas pela app — não substituem avaliação médica.)');
+
+    try {
+      await Share.share({ message: lines.join('\n') });
+    } catch (e) {}
+  };
+
   const dotColor =
     scanStatus === 'found' ? '#22c55e' : scanStatus === 'scanning' ? '#eab308' : scanStatus === 'error' ? '#ef4444' : colors?.COLOR_DIVIDER;
 
@@ -309,6 +554,85 @@ export default function HealthMenu({ colors, profile, history, onSaveProfile, on
         <TouchableOpacity onPress={loadSummary} style={s.refreshBtn}>
           <Text style={s.refreshBtnText}>🔄 Atualizar resumo</Text>
         </TouchableOpacity>
+      </View>
+
+      {/* TENDÊNCIA — comparação simples e transparente das últimas 2 semanas */}
+      {trendAlert && (
+        <View style={[s.trendBox, trendAlert.type === 'loss' && s.trendBoxLoss, trendAlert.type === 'gain' && s.trendBoxGain]}>
+          <Text style={s.trendText}>📊 {trendAlert.message}</Text>
+        </View>
+      )}
+
+      {/* ESTATÍSTICAS RÁPIDAS — IMC + média de peso a 7 dias */}
+      {(bmiInfo || movingAvgWeight != null) && (
+        <View style={s.quickStatsRow}>
+          {bmiInfo && (
+            <View style={s.quickStatItem}>
+              <Text style={s.bmiLabel}>IMC: <Text style={s.bmiValue}>{bmiInfo.bmi}</Text></Text>
+              <Text style={s.bmiBadge}>{bmiInfo.label}</Text>
+            </View>
+          )}
+          {movingAvgWeight != null && (
+            <View style={s.quickStatItem}>
+              <Text style={s.bmiLabel}>Média 7d: <Text style={s.bmiValue}>{movingAvgWeight} kg</Text></Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* HIDRATAÇÃO — orientação geral, não prescrição médica */}
+      {waterSuggestion != null && (
+        <View style={s.hydrationRow}>
+          <Text style={s.hydrationText}>
+            💧 Sugestão de água hoje: <Text style={s.hydrationValue}>{(waterSuggestion / 1000).toFixed(1)} L</Text>
+          </Text>
+        </View>
+      )}
+
+      {/* OBJETIVO DE PESO */}
+      <View style={s.card}>
+        <Text style={s.cardTitle}>🎯 OBJETIVO DE PESO</Text>
+
+        {goal ? (
+          <View style={{ marginTop: 10 }}>
+            <View style={s.breakdownRow}>
+              <Text style={s.breakdownLabel}>Objetivo</Text>
+              <Text style={s.breakdownValue}>{goal.goalWeightKg} kg</Text>
+            </View>
+            {goalProgress && (
+              <>
+                <View style={s.progressBarTrack}>
+                  <View style={[s.progressBarFill, { width: `${goalProgress.progressPercent}%` }]} />
+                </View>
+                <Text style={s.progressText}>
+                  {goalProgress.progressPercent}% do caminho · faltam {Math.abs(goalProgress.remainingKg)} kg
+                </Text>
+                <Text style={s.progressSubText}>
+                  {goalProgress.etaWeeks != null
+                    ? `À taxa atual (${goalProgress.ratePerWeek > 0 ? '+' : ''}${goalProgress.ratePerWeek} kg/semana), estimativa de ~${goalProgress.etaWeeks} semanas.`
+                    : 'Ainda sem tendência clara nessa direção para estimar uma data.'}
+                </Text>
+              </>
+            )}
+            <TouchableOpacity onPress={handleClearGoal} style={s.linkBtn}>
+              <Text style={s.deleteText}>Remover objetivo</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={s.goalInputRow}>
+            <TextInput
+              style={s.goalInput}
+              placeholder="Peso-objetivo (kg)"
+              placeholderTextColor={colors?.COLOR_SECONDARY || '#94a3b8'}
+              keyboardType="decimal-pad"
+              value={goalInput}
+              onChangeText={setGoalInput}
+            />
+            <TouchableOpacity onPress={handleSaveGoal} style={s.goalSaveBtn}>
+              <Text style={s.goalSaveBtnText}>Definir</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* BALANÇA XIAOMI */}
@@ -351,6 +675,40 @@ export default function HealthMenu({ colors, profile, history, onSaveProfile, on
           </TouchableOpacity>
         )}
 
+        {/* COMPOSIÇÃO CORPORAL — calculada a partir do peso+impedância desta
+            pesagem e da altura/idade/género do perfil. Ver utils/bodyComposition.js
+            para a explicação completa da fórmula e das suas limitações. */}
+        {lastSavedReading?.bodyFatPercent != null ? (
+          <View style={s.compositionBox}>
+            <Text style={s.compositionDisclaimer}>
+              Estimativa (não é um valor clínico) — a Xiaomi não publica o algoritmo exato da balança.
+            </Text>
+            <View style={s.compositionRow}>
+              <View style={s.compositionItem}>
+                <Text style={s.compositionValue}>{lastSavedReading.bodyFatPercent}%</Text>
+                <Text style={s.compositionLabel}>Massa Gorda</Text>
+                <Text style={s.compositionSubLabel}>{lastSavedReading.fatMassKg} kg</Text>
+              </View>
+              <View style={s.compositionItem}>
+                <Text style={s.compositionValue}>{lastSavedReading.leanMassPercent}%</Text>
+                <Text style={s.compositionLabel}>Massa Magra</Text>
+                <Text style={s.compositionSubLabel}>{lastSavedReading.leanMassKg} kg</Text>
+              </View>
+              <View style={s.compositionItem}>
+                <Text style={s.compositionValue}>{lastSavedReading.bodyWaterPercent}%</Text>
+                <Text style={s.compositionLabel}>Água Corporal</Text>
+                <Text style={s.compositionSubLabel}>{lastSavedReading.bodyWaterKg} kg</Text>
+              </View>
+            </View>
+          </View>
+        ) : (
+          lastSavedReading && (
+            <Text style={s.compositionHint}>
+              Preenche a tua altura e idade no perfil para veres também massa gorda, massa magra e água corporal.
+            </Text>
+          )
+        )}
+
         <TouchableOpacity onPress={() => setShowScaleHistory(!showScaleHistory)} style={s.linkBtn}>
           <Text style={s.linkBtnText}>
             {showScaleHistory ? '▲ Esconder' : '▼ Ver'} histórico da balança ({scaleHistory.length})
@@ -367,6 +725,11 @@ export default function HealthMenu({ colors, profile, history, onSaveProfile, on
                   <Text style={s.scaleHistoryMeta}>
                     {entry.date} às {entry.time}{entry.impedance != null ? ` · ${entry.impedance} Ω` : ''}
                   </Text>
+                  {entry.bodyFatPercent != null && (
+                    <Text style={s.scaleHistoryComposition}>
+                      🩶 {entry.bodyFatPercent}% gordura · 💧 {entry.bodyWaterPercent}% água
+                    </Text>
+                  )}
                 </View>
                 <TouchableOpacity onPress={() => handleDeleteScaleEntry(entry.id)}>
                   <Text style={s.deleteText}>Eliminar</Text>
@@ -383,6 +746,148 @@ export default function HealthMenu({ colors, profile, history, onSaveProfile, on
         )}
         {showDebug && liveReading?.hex && <Text style={s.debugText}>{liveReading.hex}</Text>}
       </View>
+
+      {/* MEDIDAS CORPORAIS — cintura/anca, para o rácio cintura-anca (WHR) */}
+      <View style={s.card}>
+        <Text style={s.cardTitle}>📏 MEDIDAS CORPORAIS</Text>
+        <Text style={s.compositionDisclaimer}>
+          Rácio cintura-anca (OMS) — mede com a fita métrica esticada, sem apertar.
+        </Text>
+
+        {whrInfo && (
+          <View style={[s.whrBox, whrInfo.isElevated && s.whrBoxElevated]}>
+            <Text style={s.whrValue}>WHR: {whrInfo.whr}</Text>
+            <Text style={s.whrLabel}>{whrInfo.label}</Text>
+          </View>
+        )}
+
+        <View style={s.goalInputRow}>
+          <TextInput
+            style={[s.goalInput, { marginRight: 6 }]}
+            placeholder="Cintura (cm)"
+            placeholderTextColor={colors?.COLOR_SECONDARY || '#94a3b8'}
+            keyboardType="decimal-pad"
+            value={waistInput}
+            onChangeText={setWaistInput}
+          />
+          <TextInput
+            style={s.goalInput}
+            placeholder="Anca (cm)"
+            placeholderTextColor={colors?.COLOR_SECONDARY || '#94a3b8'}
+            keyboardType="decimal-pad"
+            value={hipInput}
+            onChangeText={setHipInput}
+          />
+          <TouchableOpacity onPress={handleSaveMeasurement} style={s.goalSaveBtn}>
+            <Text style={s.goalSaveBtnText}>Guardar</Text>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity onPress={() => setShowMeasurements(!showMeasurements)} style={s.linkBtn}>
+          <Text style={s.linkBtnText}>
+            {showMeasurements ? '▲ Esconder' : '▼ Ver'} histórico de medidas ({measurements.length})
+          </Text>
+        </TouchableOpacity>
+
+        {showMeasurements && (
+          <View style={s.scaleHistoryList}>
+            {measurements.length === 0 && <Text style={s.emptyText}>Ainda não há medidas registadas.</Text>}
+            {measurements.map((entry) => (
+              <View key={entry.id} style={s.scaleHistoryRow}>
+                <View>
+                  <Text style={s.scaleHistoryWeight}>Cintura {entry.waist} cm · Anca {entry.hip} cm</Text>
+                  <Text style={s.scaleHistoryMeta}>{entry.date}</Text>
+                </View>
+                <TouchableOpacity onPress={() => handleDeleteMeasurement(entry.id)}>
+                  <Text style={s.deleteText}>Eliminar</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+
+      {/* EVOLUÇÃO — gráfico com as últimas pesagens, para ver a tendência ao
+          longo do tempo (o que realmente importa numa balança de casa). */}
+      {chartEntries.length >= 2 && (
+        <View style={s.card}>
+          <Text style={s.cardTitle}>📈 EVOLUÇÃO</Text>
+
+          <View style={s.chartToggleRow}>
+            {Object.entries(CHART_METRICS).map(([metricKey, m]) => (
+              <TouchableOpacity
+                key={metricKey}
+                onPress={() => setChartMetric(metricKey)}
+                style={[s.chartToggleBtn, chartMetric === metricKey && s.chartToggleBtnActive]}
+              >
+                <Text style={[s.chartToggleText, chartMetric === metricKey && s.chartToggleTextActive]}>
+                  {m.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {chartDataPoints.length >= 2 ? (
+            <LineChart
+              data={{ labels: chartLabels, datasets: [{ data: chartDataPoints }] }}
+              width={Dimensions.get('window').width - 76}
+              height={180}
+              yAxisSuffix={activeChartMetric.unit === '%' ? '%' : ''}
+              chartConfig={{
+                backgroundGradientFrom: colors?.COLOR_CARD_BG || '#1e293b',
+                backgroundGradientTo: colors?.COLOR_CARD_BG || '#1e293b',
+                backgroundGradientFromOpacity: 0.001,
+                backgroundGradientToOpacity: 0.001,
+                decimalPlaces: 1,
+                color: (opacity = 1) => activeChartMetric.color(opacity),
+                labelColor: () => colors?.COLOR_SECONDARY || '#94a3b8',
+                propsForDots: { r: '3' },
+              }}
+              bezier
+              style={{ borderRadius: 12, marginTop: 8 }}
+            />
+          ) : (
+            <Text style={s.emptyText}>
+              Ainda não há dados suficientes de {activeChartMetric.label.toLowerCase()} para desenhar o gráfico.
+            </Text>
+          )}
+        </View>
+      )}
+
+      {/* LEMBRETE DE PESAGEM */}
+      <View style={s.card}>
+        <Text style={s.cardTitle}>⏰ LEMBRETE DE PESAGEM</Text>
+        <Text style={s.compositionDisclaimer}>
+          A hora exata pode variar um pouco consoante a otimização de bateria do telemóvel.
+        </Text>
+        <View style={s.chartToggleRow}>
+          {REMINDER_TIME_PRESETS.map((preset) => {
+            const isActive = reminderStatus?.hour === preset.hour && reminderStatus?.minute === preset.minute;
+            return (
+              <TouchableOpacity
+                key={preset.label}
+                disabled={reminderBusy}
+                onPress={() => handleSetReminder(preset.hour, preset.minute)}
+                style={[s.chartToggleBtn, isActive && s.chartToggleBtnActive]}
+              >
+                <Text style={[s.chartToggleText, isActive && s.chartToggleTextActive]}>{preset.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        {reminderStatus ? (
+          <TouchableOpacity onPress={handleCancelReminder} disabled={reminderBusy} style={s.linkBtn}>
+            <Text style={s.deleteText}>Desligar lembrete</Text>
+          </TouchableOpacity>
+        ) : (
+          <Text style={s.compositionHint}>Sem lembrete agendado — escolhe uma hora acima para ativar.</Text>
+        )}
+      </View>
+
+      {/* EXPORTAR RELATÓRIO */}
+      <TouchableOpacity onPress={handleExportReport} style={s.exportBtn}>
+        <Text style={s.exportBtnText}>📤 Exportar / Partilhar Relatório</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -438,6 +943,7 @@ const buildStyles = (colors = {}) =>
       padding: 14,
       borderWidth: 1,
       borderColor: colors.COLOR_DIVIDER || 'rgba(255,255,255,0.15)',
+      marginBottom: 12,
     },
     cardTitle: { color: colors.COLOR_PRIMARY || '#fff', fontWeight: '800', fontSize: 13, letterSpacing: 0.5 },
     scaleHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
@@ -492,4 +998,144 @@ const buildStyles = (colors = {}) =>
       marginTop: 6,
       fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     },
+
+    // --- IMC / estatísticas rápidas ---
+    quickStatsRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+    quickStatItem: {
+      flex: 1,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      backgroundColor: colors.COLOR_CARD_BG || 'rgba(255,255,255,0.06)',
+      borderRadius: 12,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+    },
+    bmiLabel: { color: colors.COLOR_SECONDARY || '#cbd5e1', fontSize: 12, fontWeight: '600' },
+    bmiValue: { color: colors.COLOR_PRIMARY || '#fff', fontWeight: '800' },
+    bmiBadge: { color: colors.COLOR_LIME_ENERGY || '#a3e635', fontSize: 11, fontWeight: '800' },
+
+    // --- Tendência ---
+    trendBox: {
+      backgroundColor: colors.COLOR_CARD_BG || 'rgba(255,255,255,0.08)',
+      borderRadius: 12,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      marginBottom: 12,
+      borderLeftWidth: 3,
+      borderLeftColor: colors.COLOR_DIVIDER || 'rgba(255,255,255,0.2)',
+    },
+    trendBoxLoss: { borderLeftColor: colors.COLOR_LIME_ENERGY || '#22c55e' },
+    trendBoxGain: { borderLeftColor: colors.COLOR_RED_ACCENT || '#ef4444' },
+    trendText: { color: colors.COLOR_PRIMARY || '#fff', fontSize: 12, fontWeight: '600' },
+
+    // --- Hidratação ---
+    hydrationRow: {
+      backgroundColor: colors.COLOR_CARD_BG || 'rgba(255,255,255,0.06)',
+      borderRadius: 12,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      marginBottom: 12,
+    },
+    hydrationText: { color: colors.COLOR_SECONDARY || '#cbd5e1', fontSize: 12, fontWeight: '600' },
+    hydrationValue: { color: '#38bdf8', fontWeight: '800' },
+
+    // --- Composição corporal (massa gorda/magra/água) ---
+    compositionBox: {
+      marginTop: 12,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: colors.COLOR_DIVIDER || 'rgba(255,255,255,0.12)',
+    },
+    compositionDisclaimer: {
+      color: colors.COLOR_SECONDARY || '#94a3b8',
+      fontSize: 9,
+      fontStyle: 'italic',
+      textAlign: 'center',
+      marginBottom: 8,
+    },
+    compositionRow: { flexDirection: 'row', justifyContent: 'space-around' },
+    compositionItem: { alignItems: 'center', flex: 1 },
+    compositionValue: { color: colors.COLOR_PRIMARY || '#fff', fontSize: 16, fontWeight: '800' },
+    compositionLabel: { color: colors.COLOR_SECONDARY || '#cbd5e1', fontSize: 10, fontWeight: '700', marginTop: 2 },
+    compositionSubLabel: { color: colors.COLOR_SECONDARY || '#64748b', fontSize: 9, marginTop: 1 },
+    compositionHint: {
+      color: colors.COLOR_SECONDARY || '#94a3b8',
+      fontSize: 10,
+      fontStyle: 'italic',
+      textAlign: 'center',
+      marginTop: 10,
+    },
+    scaleHistoryComposition: { color: colors.COLOR_SECONDARY || '#94a3b8', fontSize: 10, marginTop: 2 },
+
+    // --- Gráfico de evolução / presets de hora do lembrete ---
+    chartToggleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
+    chartToggleBtn: {
+      paddingVertical: 5,
+      paddingHorizontal: 10,
+      borderRadius: 10,
+      backgroundColor: colors.COLOR_CARD_BG || 'rgba(255,255,255,0.08)',
+      borderWidth: 1,
+      borderColor: colors.COLOR_DIVIDER || 'rgba(255,255,255,0.15)',
+    },
+    chartToggleBtnActive: { backgroundColor: colors.COLOR_LIME_ENERGY || '#3b82f6', borderColor: 'transparent' },
+    chartToggleText: { color: colors.COLOR_SECONDARY || '#cbd5e1', fontSize: 10, fontWeight: '700' },
+    chartToggleTextActive: { color: colors.COLOR_ACCENT_TEXT || '#fff' },
+
+    // --- Objetivo de peso ---
+    goalInputRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
+    goalInput: {
+      flex: 1,
+      backgroundColor: colors.COLOR_CARD_BG || 'rgba(255,255,255,0.08)',
+      borderRadius: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      color: colors.COLOR_PRIMARY || '#fff',
+      fontSize: 12,
+      borderWidth: 1,
+      borderColor: colors.COLOR_DIVIDER || 'rgba(255,255,255,0.15)',
+    },
+    goalSaveBtn: {
+      backgroundColor: colors.COLOR_LIME_ENERGY || '#3b82f6',
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      marginLeft: 8,
+    },
+    goalSaveBtnText: { color: colors.COLOR_ACCENT_TEXT || '#fff', fontWeight: '800', fontSize: 12 },
+    progressBarTrack: {
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: colors.COLOR_CARD_BG || 'rgba(255,255,255,0.1)',
+      marginTop: 10,
+      overflow: 'hidden',
+    },
+    progressBarFill: { height: '100%', backgroundColor: colors.COLOR_LIME_ENERGY || '#22c55e', borderRadius: 4 },
+    progressText: { color: colors.COLOR_PRIMARY || '#fff', fontSize: 11, fontWeight: '700', marginTop: 6 },
+    progressSubText: { color: colors.COLOR_SECONDARY || '#94a3b8', fontSize: 10, marginTop: 2 },
+
+    // --- WHR ---
+    whrBox: {
+      backgroundColor: colors.COLOR_CARD_BG || 'rgba(255,255,255,0.08)',
+      borderRadius: 12,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      marginBottom: 8,
+      borderLeftWidth: 3,
+      borderLeftColor: colors.COLOR_LIME_ENERGY || '#22c55e',
+    },
+    whrBoxElevated: { borderLeftColor: colors.COLOR_RED_ACCENT || '#ef4444' },
+    whrValue: { color: colors.COLOR_PRIMARY || '#fff', fontWeight: '800', fontSize: 13 },
+    whrLabel: { color: colors.COLOR_SECONDARY || '#cbd5e1', fontSize: 11, marginTop: 2 },
+
+    // --- Exportar relatório ---
+    exportBtn: {
+      backgroundColor: colors.COLOR_CARD_BG || 'rgba(255,255,255,0.08)',
+      borderRadius: 14,
+      paddingVertical: 12,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: colors.COLOR_DIVIDER || 'rgba(255,255,255,0.15)',
+    },
+    exportBtnText: { color: colors.COLOR_PRIMARY || '#fff', fontWeight: '800', fontSize: 12 },
   });

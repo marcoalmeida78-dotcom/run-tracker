@@ -35,6 +35,22 @@ export const calculateBMR = (profile) => {
   return Math.round(isMale ? base + 5 : base - 161);
 };
 
+/**
+ * Sugestão de água diária (ml) — orientação geral, não uma prescrição médica
+ * individual:
+ *   - Base: ~35 ml por kg de peso corporal (referência geral amplamente
+ *     citada em nutrição, alinhada com as recomendações de ingestão adequada
+ *     da EFSA/IOM para adultos saudáveis).
+ *   - Extra por exercício: regra de referência comum em nutrição desportiva
+ *     de ~1 ml de água extra por kcal gasta em exercício nesse dia.
+ */
+export const suggestDailyWaterMl = (weightKg, exerciseKcalToday = 0) => {
+  if (!weightKg) return null;
+  const base = weightKg * 35;
+  const extra = Math.max(0, exerciseKcalToday) * 1;
+  return Math.round(base + extra);
+};
+
 // Devolve a mesma formatação de data usada no histórico da app (ex: "01/08/2026"),
 // para conseguirmos identificar quais os registos de HOJE.
 const todayPTString = () => new Date().toLocaleDateString('pt-PT');
