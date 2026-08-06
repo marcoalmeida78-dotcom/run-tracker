@@ -170,6 +170,7 @@ export default function MainScreen({
         onPress={() => onToggleAccordion('historico')}
       >
         <View style={styles.cardHeaderRow}>
+		 <Text style={styles.tileNumberPrimary}>06</Text>//marco introduzi esta linha
           <Text style={styles.cardHeaderTitleDark}>HISTÓRICO DE EXERCÍCIOS</Text>
           <Text style={styles.accordionIcon}>{activeMenu === 'historico' ? '▲ FECHAR' : '▼ VER'}</Text>
         </View>
@@ -191,7 +192,8 @@ export default function MainScreen({
         onPress={() => onToggleAccordion('saude')}
       >
         <View style={styles.cardHeaderRow}>
-          <Text style={styles.cardHeaderTitleDark}>🏥 SAÚDE & METABOLISMO</Text>
+		 <Text style={styles.tileNumberPrimary}>07</Text>//marco introduzi esta linha
+          <Text style={styles.cardHeaderTitleDark}>SAÚDE & METABOLISMO</Text>
           <Text style={styles.accordionIcon}>{activeMenu === 'saude' ? '▲ FECHAR' : '▼ ABRIR'}</Text>
         </View>
         <Text style={styles.recommendationTextDark}>TMB, Balança Xiaomi e Google Fit</Text>
@@ -210,6 +212,7 @@ export default function MainScreen({
       {/* --- BARRA DE ENERGIA DO PLANO --- */}
       <TouchableOpacity style={[styles.batterySectionTouchable, { marginTop: 12 }]} onPress={onShowBatteryInfo}>
         <View style={styles.batteryTitleRow}>
+		<Text style={styles.tileNumberPrimary}>08</Text>//marco introduzi esta linha
           <Text style={styles.batterySectionTitle}>BARRA DE ENERGIA DO PLANO (75 SESSÕES)</Text>
         </View>
         <View style={styles.batteryContainer}>
