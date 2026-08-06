@@ -535,7 +535,7 @@ export default function HealthMenu({ colors, profile, history, onSaveProfile, on
   return (
     <View style={s.wrapper}>
       <View style={s.header}>
-        <Text style={s.headerText}>SUBMENU: 07 - SAÚDE & METABOLISMO</Text>//marco alterei esta linha
+        <Text style={s.headerText}>SUBMENU: 07 - SAÚDE & METABOLISMO</Text>
         {onClose && (
           <TouchableOpacity onPress={onClose}>
             <Text style={s.closeText}>▲ FECHAR</Text>

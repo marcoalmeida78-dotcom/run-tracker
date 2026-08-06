@@ -5,7 +5,7 @@ export default function HistoryMenu({ styles, onClose, history, onDeleteHistoryI
   return (
     <View style={styles.accordionBodyGrid}>
       <View style={styles.submenuHeader}>
-        <Text style={styles.submenuHeaderText}>SUBMENU: 05 - HISTÓRICO</Text> //marco alterei o 05 desta linha
+        <Text style={styles.submenuHeaderText}>SUBMENU: 05 - HISTÓRICO</Text>
         <TouchableOpacity onPress={onClose}>
           <Text style={styles.submenuCloseText}>▲ FECHAR</Text>
         </TouchableOpacity>

@@ -37,6 +37,6 @@ export const RUN_PROGRAM_LEVELS = [
   { id: 21, title: 'Nível 21', sessions: ['Sessão 61', 'Sessão 62', 'Sessão 63'], summary: '9m corrida / 2m caminhada (3 repetições)', runSec: 540, walkSec: 120, repeats: 3 },
   { id: 22, title: 'Nível 22', sessions: ['Sessão 64', 'Sessão 65', 'Sessão 66'], summary: '12m corrida / 2m caminhada (2 repetições)', runSec: 720, walkSec: 120, repeats: 2 },
   { id: 23, title: 'Nível 23', sessions: ['Sessão 67', 'Sessão 68', 'Sessão 69'], summary: '15m corrida / 3m caminhada (2 repetições)', runSec: 900, walkSec: 180, repeats: 2 },
-  { id: 24, title: 'Nível 24', sessions: ['Sessão 70', 'Sessão 71', 'Sessão 72'], summary: '20m corrida / 3m caminhada (1 repetição longa)', runSec: 1200, walkSec: 180, repeats: 2 },//marco alterei a repetição de 1 para 2
+  { id: 24, title: 'Nível 24', sessions: ['Sessão 70', 'Sessão 71', 'Sessão 72'], summary: '20m corrida / 3m caminhada (1 repetição longa)', runSec: 1200, walkSec: 180, repeats: 2 },
   { id: 25, title: 'Nível 25 (Objetivo 5K)', sessions: ['Sessão 73', 'Sessão 74', 'Sessão 75'], summary: '30 min de corrida contínua para atingir os 5K', runSec: 1800, walkSec: 0, repeats: 1 },
 ];
