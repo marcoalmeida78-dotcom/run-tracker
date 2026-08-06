@@ -90,7 +90,14 @@ export default function App() {
   const [suddenDeathBlock, setSuddenDeathBlock] = useState(1);
   const suddenDeathBlockRef = useRef(1);
   const suddenDeathBlockStartTimeRef = useRef(0);
+  const suddenDeathBlockStartDistRef = useRef(0);
   const lastCountdownSecRef = useRef(-1);
+  // Valores já calculados por bloco (tempo restante e metros percorridos NESTE
+  // bloco), para o ActiveExerciseScreen só ter de os mostrar — sem refazer
+  // contas a partir do cronómetro/distância totais (era aí que estava o bug
+  // da contagem regressiva só aparecer no bloco 1).
+  const [suddenDeathBlockSecondsLeft, setSuddenDeathBlockSecondsLeft] = useState(0);
+  const [suddenDeathBlockProgressM, setSuddenDeathBlockProgressM] = useState(0);
 
   const [showEsquinaModal, setShowEsquinaModal] = useState(false);
   const esquinaTargetMultiplierRef = useRef(1);
@@ -516,6 +523,35 @@ export default function App() {
     const elapsedMs = now - startTimeRef.current - totalPausedTimeRef.current;
     const currentSec = Math.floor(elapsedMs / 1000);
 
+    // --- MORTE SÚBITA: avanço de bloco assim que os 100m desse bloco são
+    // cumpridos. Verificado em CADA atualização de GPS (não só uma vez por
+    // segundo), para o bloco avançar no instante exato em que a distância é
+    // atingida — não faz sentido esperar pelo tempo todo do bloco se a
+    // pessoa já correu os 100m mais depressa. Cada bloco é sempre 100m
+    // fixos (ver constants/runProgram.js); só o tempo disponível varia.
+    if (exerciseTypeRef.current === 'challenge_morte_subita') {
+      const configBlock = SUDDEN_DEATH_BLOCKS[suddenDeathBlockRef.current - 1];
+      if (configBlock) {
+        const blockDistKm = currentDist - suddenDeathBlockStartDistRef.current;
+        if (blockDistKm >= configBlock.distKm) {
+          if (suddenDeathBlockRef.current >= 10) {
+            autoFinishExercise(exerciseTypeRef.current, exerciseTitleRef.current, currentSec, currentDist, currentSpeed, activeConfigRef.current);
+            return;
+          }
+          const nextBlock = suddenDeathBlockRef.current + 1;
+          suddenDeathBlockRef.current = nextBlock;
+          setSuddenDeathBlock(nextBlock);
+          suddenDeathBlockStartTimeRef.current = Date.now();
+          suddenDeathBlockStartDistRef.current = currentDist;
+          lastCountdownSecRef.current = -1;
+          setSuddenDeathBlockSecondsLeft(SUDDEN_DEATH_BLOCKS[nextBlock - 1].timeSec);
+          setSuddenDeathBlockProgressM(0);
+          Vibration.vibrate([300, 100, 300]);
+          playAudio(`Bloco ${nextBlock} iniciado! Acelera!`);
+        }
+      }
+    }
+
     if (currentSec > secondsRef.current) {
       setSeconds(currentSec);
       secondsRef.current = currentSec;
@@ -524,30 +560,28 @@ export default function App() {
         updateTimelineProgress(currentSec, activeConfigRef.current.phases);
       }
 
+      // --- MORTE SÚBITA: contagem regressiva do bloco atual (corrigida — antes
+      // usava o cronómetro TOTAL do exercício em vez do tempo decorrido DESTE
+      // bloco, por isso só funcionava no bloco 1) + falha se o tempo esgotar
+      // sem os 100m cumpridos + áudio de contagem final nos últimos 5 segundos.
       if (exerciseTypeRef.current === 'challenge_morte_subita') {
         const configBlock = SUDDEN_DEATH_BLOCKS[suddenDeathBlockRef.current - 1];
-        const blockSec = Math.floor((now - suddenDeathBlockStartTimeRef.current) / 1000);
+        if (configBlock) {
+          const blockSec = Math.floor((now - suddenDeathBlockStartTimeRef.current) / 1000);
+          const blockDistKm = currentDist - suddenDeathBlockStartDistRef.current;
+          const secondsLeft = Math.max(0, configBlock.timeSec - blockSec);
 
-        if (blockSec >= configBlock.timeSec) {
-          if (currentDist < configBlock.distKm) {
-            stopAndCleanupExercise();
-            Vibration.vibrate([400, 200, 400]);
-            playAudio(`Tempo esgotado no bloco ${configBlock.block}. Desafio Morte Súbita não concluído.`);
-            Alert.alert('Fim do Desafio ❌', `Não conseguiste atingir os ${configBlock.distKm * 1000} metros dentro do tempo limite de ${configBlock.timeSec} segundos.`);
+          setSuddenDeathBlockSecondsLeft(secondsLeft);
+          setSuddenDeathBlockProgressM(Math.round(Math.max(0, blockDistKm) * 1000));
+
+          if (secondsLeft <= 5 && secondsLeft >= 1 && lastCountdownSecRef.current !== secondsLeft) {
+            lastCountdownSecRef.current = secondsLeft;
+            playAudio(String(secondsLeft));
+          }
+
+          if (blockSec >= configBlock.timeSec && blockDistKm < configBlock.distKm) {
+            handleSuddenDeathFailure(configBlock, currentSec, currentDist, currentSpeed);
             return;
-          } else {
-            if (suddenDeathBlockRef.current >= 10) {
-              autoFinishExercise(exerciseTypeRef.current, exerciseTitleRef.current, currentSec, currentDist, currentSpeed, activeConfigRef.current);
-              return;
-            } else {
-              const nextBlock = suddenDeathBlockRef.current + 1;
-              suddenDeathBlockRef.current = nextBlock;
-              setSuddenDeathBlock(nextBlock);
-              suddenDeathBlockStartTimeRef.current = Date.now();
-              lastCountdownSecRef.current = -1;
-              Vibration.vibrate([300, 100, 300]);
-              playAudio(`Bloco ${nextBlock} iniciado! Acelera!`);
-            }
           }
         }
       }
@@ -557,7 +591,12 @@ export default function App() {
       }
     }
 
-    if (exerciseTypeRef.current !== 'walk_esquina' && activeConfigRef.current?.targetDistKm && currentDist >= activeConfigRef.current.targetDistKm) {
+    if (
+      exerciseTypeRef.current !== 'walk_esquina' &&
+      exerciseTypeRef.current !== 'challenge_morte_subita' &&
+      activeConfigRef.current?.targetDistKm &&
+      currentDist >= activeConfigRef.current.targetDistKm
+    ) {
       autoFinishExercise(exerciseTypeRef.current, exerciseTitleRef.current, secondsRef.current, currentDist, currentSpeed, activeConfigRef.current);
     }
   };
@@ -606,7 +645,10 @@ export default function App() {
     setSuddenDeathBlock(1);
     suddenDeathBlockRef.current = 1;
     suddenDeathBlockStartTimeRef.current = Date.now();
+    suddenDeathBlockStartDistRef.current = 0;
     lastCountdownSecRef.current = -1;
+    setSuddenDeathBlockSecondsLeft(SUDDEN_DEATH_BLOCKS[0].timeSec);
+    setSuddenDeathBlockProgressM(0);
 
     setIsExercising(true);
     setIsPaused(false);
@@ -851,6 +893,7 @@ export default function App() {
     currentPhaseIndexRef.current = 0;
     suddenDeathBlockRef.current = 1;
     suddenDeathBlockStartTimeRef.current = 0;
+    suddenDeathBlockStartDistRef.current = 0;
     lastCountdownSecRef.current = -1;
 
     setIsExercising(false);
@@ -860,6 +903,43 @@ export default function App() {
     currentCoordRef.current = null;
     lastLocation.current = null;
     clearMapRoute();
+  };
+
+  // --- MORTE SÚBITA: falha do desafio (tempo esgotado num bloco sem cumprir
+  // os 100m). Ao contrário de antes, o registo fica guardado no histórico —
+  // marcado como falhado, com o bloco onde parou, a distância total
+  // percorrida e as calorias gastas — em vez de se perder por completo.
+  const handleSuddenDeathFailure = async (configBlock, currentSec, currentDist, currentSpeed) => {
+    if (isFinishingRef.current) return;
+    isFinishingRef.current = true;
+    stopAndCleanupExercise();
+    Vibration.vibrate([400, 200, 400]);
+    playAudio(`Tempo esgotado no bloco ${configBlock.block}. Desafio Morte Súbita não concluído.`);
+    Alert.alert(
+      'Fim do Desafio ❌',
+      `Não conseguiste percorrer os 100 metros do bloco ${configBlock.block} dentro do tempo limite de ${configBlock.timeSec} segundos.`
+    );
+
+    const newRecord = {
+      id: Date.now().toString(),
+      title: exerciseTitleRef.current,
+      date: new Date().toLocaleDateString('pt-PT'),
+      startTime: startTimeRef.current ? new Date(startTimeRef.current).toISOString() : null,
+      endTime: new Date().toISOString(),
+      timeSec: currentSec,
+      distanceKm: currentDist.toFixed(2),
+      pace: currentDist > 0 ? (currentSec / 60 / currentDist).toFixed(2) : '0.00',
+      calories: calculateCalories(currentDist, currentSec, profile.weight),
+      speed: currentSpeed,
+      vo2Max: null,
+      failed: true,
+      failedAtBlock: configBlock.block,
+    };
+
+    const updatedHistory = [newRecord, ...history];
+    setHistory(updatedHistory);
+    updateRecordsFromHistory(updatedHistory);
+    await AsyncStorage.setItem('@user_history', JSON.stringify(updatedHistory));
   };
 
   const autoFinishExercise = async (type, title, finalSec, finalDist, finalSpeed, config) => {
@@ -1146,6 +1226,8 @@ export default function App() {
           exerciseTitle={exerciseTitle}
           exerciseType={exerciseType}
           suddenDeathBlock={suddenDeathBlock}
+          suddenDeathBlockSecondsLeft={suddenDeathBlockSecondsLeft}
+          suddenDeathBlockProgressM={suddenDeathBlockProgressM}
           distance={distance}
           timelinePhases={timelinePhases}
           currentPhaseIndex={currentPhaseIndex}

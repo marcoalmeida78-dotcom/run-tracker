@@ -73,6 +73,7 @@ export const getStyles = (colors) => StyleSheet.create({
   historyHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   historyTitle: { fontWeight: '700', fontSize: 13, color: colors.COLOR_PRIMARY },
   historySub: { fontSize: 11, color: colors.COLOR_SECONDARY },
+  historyFailedBadge: { fontSize: 11, color: colors.COLOR_RED_ACCENT || '#ef4444', fontWeight: '700', marginTop: 2, marginBottom: 2 },
   emptyText: { color: colors.COLOR_SECONDARY, fontSize: 13, fontStyle: 'italic', textAlign: 'center', padding: 10 },
   batterySectionTouchable: { backgroundColor: colors.COLOR_CARD_BG, borderRadius: 20, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: colors.COLOR_DIVIDER },
   batteryTitleRow: { marginBottom: 10 },

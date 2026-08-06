@@ -17,11 +17,18 @@ export default function HistoryMenu({ styles, onClose, history, onDeleteHistoryI
         history.map((item) => (
           <View key={item.id} style={styles.historyCard}>
             <View style={styles.historyHeaderRow}>
-              <Text style={styles.historyTitle}>{item.title} - {item.date}</Text>
+              <Text style={styles.historyTitle}>
+                {item.failed ? '❌ ' : ''}{item.title} - {item.date}
+              </Text>
               <TouchableOpacity onPress={() => onDeleteHistoryItem(item.id)}>
                 <Text>🗑️</Text>
               </TouchableOpacity>
             </View>
+            {item.failed && (
+              <Text style={styles.historyFailedBadge}>
+                Não concluído — parou no bloco {item.failedAtBlock} / 10
+              </Text>
+            )}
             <Text style={styles.historySub}>Distância: {item.distanceKm} km | Tempo: {formatHMS(item.timeSec)}</Text>
           </View>
         ))

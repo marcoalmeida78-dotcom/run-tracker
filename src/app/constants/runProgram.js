@@ -1,15 +1,15 @@
 // --- CONFIGURAÇÃO DO DESAFIO MORTE SÚBITA ---
 export const SUDDEN_DEATH_BLOCKS = [
-  { block: 1, distKm: 0.1, timeSec: 45 },
-  { block: 2, distKm: 0.2, timeSec: 40 },
-  { block: 3, distKm: 0.3, timeSec: 35 },
-  { block: 4, distKm: 0.4, timeSec: 30 },
-  { block: 5, distKm: 0.5, timeSec: 26 },
-  { block: 6, distKm: 0.6, timeSec: 23 },
-  { block: 7, distKm: 0.7, timeSec: 20 },
-  { block: 8, distKm: 0.8, timeSec: 18 },
-  { block: 9, distKm: 0.9, timeSec: 16 },
-  { block: 10, distKm: 1.0, timeSec: 14 },
+  { block: 1, distKm: 0.1, timeSec: 65 },
+  { block: 2, distKm: 0.1, timeSec: 60 },
+  { block: 3, distKm: 0.1, timeSec: 55 },
+  { block: 4, distKm: 0.1, timeSec: 50 },
+  { block: 5, distKm: 0.1, timeSec: 45 },
+  { block: 6, distKm: 0.1, timeSec: 40 },
+  { block: 7, distKm: 0.1, timeSec: 35 },
+  { block: 8, distKm: 0.1, timeSec: 30 },
+  { block: 9, distKm: 0.1, timeSec: 25 },
+  { block: 10, distKm: 0.1, timeSec: 20 },
 ];
 
 // --- PROGRAMA 0 AOS 5K (75 SESSÕES / 25 NÍVEIS) ---
