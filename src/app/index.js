@@ -141,11 +141,19 @@ export default function App() {
   const currentPhaseIndexRef = useRef(0);
   const activeConfigRef = useRef(null);
   const best1MilhaSecRef = useRef(null);
+  // Espelhos de "history" e "profile" para uso dentro de handlers presos a
+  // um useEffect com deps [] (ex: o listener do AppState do desafio "2km sem
+  // olhar") — sem isto, esses handlers ficariam sempre com os valores do
+  // primeiro render (histórico vazio, perfil por preencher).
+  const historyRef = useRef([]);
+  const profileRef = useRef({ weight: '', height: '', age: '', gender: 'masculino' });
 
   useEffect(() => { isPausedRef.current = isPaused; }, [isPaused]);
   useEffect(() => { isExercisingRef.current = isExercising; }, [isExercising]);
   useEffect(() => { exerciseTypeRef.current = exerciseType; }, [exerciseType]);
   useEffect(() => { exerciseTitleRef.current = exerciseTitle; }, [exerciseTitle]);
+  useEffect(() => { historyRef.current = history; }, [history]);
+  useEffect(() => { profileRef.current = profile; }, [profile]);
 
   useEffect(() => {
     const prepareBackgroundAudio = async () => {
@@ -195,14 +203,49 @@ export default function App() {
     };
   }, []);
 
-  const fail2KmChallenge = () => {
+  const fail2KmChallenge = async () => {
+    if (isFinishingRef.current) return;
+    isFinishingRef.current = true;
+    // Captura ANTES de limpar (mesmo motivo do bug corrigido em
+    // handleSuddenDeathFailure/autoFinishExercise — ver notas aí).
+    const capturedStartTime = startTimeRef.current;
+    const capturedTitle = exerciseTitleRef.current;
+    const capturedSec = secondsRef.current;
+    const capturedDist = distanceRef.current;
+    const capturedSpeed = speedRef.current;
     stopAndCleanupExercise();
     Vibration.vibrate([400, 200, 400]);
     playAudio('Não conseguiste caminhar 2 quilómetros sem olhar para o ecrã do telemóvel.');
     Alert.alert(
       'Desafio Não Concluído ❌',
-      'Não conseguiste caminhar 2km sem olhar para o ecrã do telemóvel. O exercício não foi concluído com êxito e não será registado no histórico.'
+      'Olhaste para o ecrã do telemóvel antes de completar os 2km. A tentativa ficou registada no histórico como não concluída.'
     );
+
+    // Agora fica gravado no histórico, tal como a Morte Súbita, em vez de se
+    // perder — usa historyRef/profileRef porque esta função é chamada a
+    // partir de um listener criado uma única vez no arranque (useEffect com
+    // deps []), por isso não pode confiar na "history"/"profile" fechadas
+    // nesse momento (ficariam sempre com os valores do primeiro render).
+    const currentProfile = profileRef.current;
+    const newRecord = {
+      id: Date.now().toString(),
+      title: capturedTitle,
+      date: new Date().toLocaleDateString('pt-PT'),
+      startTime: capturedStartTime ? new Date(capturedStartTime).toISOString() : null,
+      endTime: new Date().toISOString(),
+      timeSec: capturedSec,
+      distanceKm: capturedDist.toFixed(2),
+      pace: capturedDist > 0 ? (capturedSec / 60 / capturedDist).toFixed(2) : '0.00',
+      calories: calculateCalories(capturedDist, capturedSec, currentProfile.weight),
+      speed: capturedSpeed,
+      vo2Max: null,
+      failed: true,
+    };
+
+    const updatedHistory = [newRecord, ...historyRef.current];
+    setHistory(updatedHistory);
+    updateRecordsFromHistory(updatedHistory);
+    await AsyncStorage.setItem('@user_history', JSON.stringify(updatedHistory));
   };
 
   const openBatteryOptimizationSettings = async () => {
@@ -912,6 +955,11 @@ export default function App() {
   const handleSuddenDeathFailure = async (configBlock, currentSec, currentDist, currentSpeed) => {
     if (isFinishingRef.current) return;
     isFinishingRef.current = true;
+    // Captura ANTES de limpar — stopAndCleanupExercise() põe startTimeRef e
+    // exerciseTitleRef a zero/vazio, por isso tinham de ser lidos primeiro
+    // (bug corrigido: o registo ficava sempre com startTime nulo e título vazio).
+    const capturedStartTime = startTimeRef.current;
+    const capturedTitle = exerciseTitleRef.current;
     stopAndCleanupExercise();
     Vibration.vibrate([400, 200, 400]);
     playAudio(`Tempo esgotado no bloco ${configBlock.block}. Desafio Morte Súbita não concluído.`);
@@ -922,9 +970,9 @@ export default function App() {
 
     const newRecord = {
       id: Date.now().toString(),
-      title: exerciseTitleRef.current,
+      title: capturedTitle,
       date: new Date().toLocaleDateString('pt-PT'),
-      startTime: startTimeRef.current ? new Date(startTimeRef.current).toISOString() : null,
+      startTime: capturedStartTime ? new Date(capturedStartTime).toISOString() : null,
       endTime: new Date().toISOString(),
       timeSec: currentSec,
       distanceKm: currentDist.toFixed(2),
@@ -945,6 +993,8 @@ export default function App() {
   const autoFinishExercise = async (type, title, finalSec, finalDist, finalSpeed, config) => {
     if (isFinishingRef.current) return;
     isFinishingRef.current = true;
+    // Captura ANTES de limpar — ver nota em handleSuddenDeathFailure.
+    const capturedStartTime = startTimeRef.current;
     stopAndCleanupExercise();
     Vibration.vibrate([500, 300, 500]);
 
@@ -970,7 +1020,7 @@ export default function App() {
         Vibration.vibrate([200, 100, 200, 100, 200]);
         playAudio('Novo recorde pessoal! Bateste o teu melhor tempo anterior para este exercício. Parabéns!');
       }
-      pendingFinishRef.current = { type, title, finalSec, finalDist, finalSpeed, config };
+      pendingFinishRef.current = { type, title, finalSec, finalDist, finalSpeed, config, startTime: capturedStartTime };
       setPendingTestTitle(title);
       setHeartRateInput('');
       setTestResultData(null);
@@ -1001,7 +1051,7 @@ export default function App() {
       // startTime/endTime (ISO): usados apenas pelo menu Saúde para não
       // contar as mesmas calorias duas vezes com o Google Fit. Não afeta
       // nenhuma lógica existente do histórico ou das restantes secções.
-      startTime: startTimeRef.current ? new Date(startTimeRef.current).toISOString() : null,
+      startTime: capturedStartTime ? new Date(capturedStartTime).toISOString() : null,
       endTime: new Date().toISOString(),
       timeSec: finalSec,
       distanceKm: finalDist.toFixed(2),
@@ -1038,7 +1088,7 @@ export default function App() {
   const finalizePendingTest = async (heartRateBpm) => {
     const pending = pendingFinishRef.current;
     if (!pending) return;
-    const { type, title, finalSec, finalDist, finalSpeed, config } = pending;
+    const { type, title, finalSec, finalDist, finalSpeed, config, startTime: pendingStartTime } = pending;
 
     const fcMax = calculateFcMaxTanaka(profile.age);
     let vo2Val = null;
@@ -1064,7 +1114,7 @@ export default function App() {
       id: Date.now().toString(),
       title,
       date: new Date().toLocaleDateString('pt-PT'),
-      startTime: startTimeRef.current ? new Date(startTimeRef.current).toISOString() : null,
+      startTime: pendingStartTime ? new Date(pendingStartTime).toISOString() : null,
       endTime: new Date().toISOString(),
       timeSec: finalSec,
       distanceKm: finalDist.toFixed(2),

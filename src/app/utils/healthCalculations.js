@@ -12,9 +12,12 @@ import {
   SdkAvailabilityStatus,
 } from 'react-native-health-connect';
 import { logEvent } from './debugLog';
+import { calculateCalories } from './calculations';
 
+// Lê PASSOS, não calorias — ver nota completa em fetchGoogleFitStepsCaloriesToday
+// sobre porquê (ActiveCaloriesBurned nunca devolvia dados neste telemóvel).
 const HEALTH_CONNECT_PERMISSIONS = [
-  { accessType: 'read', recordType: 'ActiveCaloriesBurned' },
+  { accessType: 'read', recordType: 'Steps' },
 ];
 
 /**
@@ -88,12 +91,39 @@ export const getAppExerciseSummaryToday = (history = []) => {
 const intervalsOverlap = (aStart, aEnd, bStart, bEnd) => aStart < bEnd && bStart < aEnd;
 
 /**
- * Lê do Google Fit / Health Connect as calorias ATIVAS (ActiveCaloriesBurned)
- * registadas hoje, registo a registo (não agregado), e soma apenas as que NÃO
- * se sobrepõem aos intervalos de tempo dos exercícios já feitos na app — assim
- * as mesmas calorias nunca são contadas duas vezes.
+ * Comprimento de passada estimado a partir da altura — fórmula amplamente
+ * usada em apps de pedómetro/fitness para converter passos em distância:
+ *   passada(m) ≈ altura(m) × 0.415 (homens) / × 0.413 (mulheres)
+ * Não é uma medição real do teu passo — é uma aproximação populacional.
  */
-export const fetchGoogleFitCaloriesToday = async (excludeIntervals = []) => {
+const estimateStrideMeters = (heightCm, gender) => {
+  const heightM = parseFloat(heightCm) / 100;
+  if (!heightM) return null;
+  const isMale = (gender || 'masculino').toLowerCase().startsWith('m');
+  return heightM * (isMale ? 0.415 : 0.413);
+};
+
+/**
+ * Lê os PASSOS do Google Fit / Health Connect registados hoje, registo a
+ * registo, e converte-os em calorias — em vez de ler diretamente
+ * "ActiveCaloriesBurned", que neste telemóvel (só com dados do próprio
+ * telefone, sem relógio/pulseira) devolvia sempre zero registos, porque o
+ * Google Fit no telemóvel não costuma escrever esse tipo de dado sozinho,
+ * só contagem de passos.
+ *
+ * Conversão, registo a registo (cada StepsRecord já vem com o seu próprio
+ * startTime/endTime):
+ *   1) distância(km) = passos × passada_estimada(m) / 1000
+ *   2) tempo(seg) = duração real do próprio registo
+ *   3) calorias = calculateCalories(distância, tempo, peso) — a MESMA função
+ *      e os MESMOS limiares de MET já usados para os exercícios da app, para
+ *      não introduzir uma terceira filosofia de cálculo de calorias diferente.
+ *
+ * Registos que se sobrepõem a um exercício já contado na app continuam a ser
+ * excluídos (mesma lógica de sempre), para nunca contar a mesma caminhada
+ * duas vezes.
+ */
+export const fetchGoogleFitStepsCaloriesToday = async (excludeIntervals = [], profile = {}) => {
   try {
     // Diagnóstico: estado do SDK do Health Connect antes de tudo. Isto ajuda a
     // perceber se o problema é o dispositivo não ter o Health Connect instalado
@@ -115,7 +145,7 @@ export const fetchGoogleFitCaloriesToday = async (excludeIntervals = []) => {
     logEvent('GoogleFit', 'initialize() concluído', { isInitialized });
     if (!isInitialized) {
       logEvent('GoogleFit', 'initialize() devolveu false — Health Connect indisponível ou não configurado nativamente.');
-      return { totalCalories: 0, available: false, error: 'Health Connect não está disponível neste dispositivo.' };
+      return { totalCalories: 0, totalSteps: 0, available: false, error: 'Health Connect não está disponível neste dispositivo.' };
     }
 
     const granted = await getGrantedPermissions();
@@ -128,46 +158,59 @@ export const fetchGoogleFitCaloriesToday = async (excludeIntervals = []) => {
       logEvent('GoogleFit', 'Resultado do pedido de permissão', { result });
       if (!result || result.length === 0) {
         logEvent('GoogleFit', 'Permissão recusada ou vazia — utilizador não autorizou o acesso.');
-        return { totalCalories: 0, available: false, error: 'Permissão do Google Fit / Health Connect recusada.' };
+        return { totalCalories: 0, totalSteps: 0, available: false, error: 'Permissão do Google Fit / Health Connect recusada.' };
       }
     }
 
     const now = new Date();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
 
-    const response = await readRecords('ActiveCaloriesBurned', {
+    const response = await readRecords('Steps', {
       timeRangeFilter: {
         operator: 'between',
         startTime: startOfDay.toISOString(),
         endTime: now.toISOString(),
       },
     });
-    logEvent('GoogleFit', 'readRecords concluído', { totalRegistosLidos: response?.records?.length ?? 0 });
+    logEvent('GoogleFit', 'readRecords (Steps) concluído', { totalRegistosLidos: response?.records?.length ?? 0 });
 
     const records = response?.records || [];
+    const strideM = estimateStrideMeters(profile?.height, profile?.gender);
+    const weightKg = parseFloat(profile?.weight);
+
     let totalCalories = 0;
+    let totalSteps = 0;
 
     records.forEach((record) => {
       const recStart = new Date(record.startTime).getTime();
       const recEnd = new Date(record.endTime).getTime();
-      const kcal = record.energy?.inKilocalories || 0;
+      const steps = record.count || 0;
 
       const overlapsAppWorkout = excludeIntervals.some((iv) =>
         intervalsOverlap(recStart, recEnd, iv.start, iv.end)
       );
+      if (overlapsAppWorkout) return;
 
-      if (!overlapsAppWorkout) {
-        totalCalories += kcal;
-      }
+      totalSteps += steps;
+
+      if (!strideM || !weightKg || steps <= 0 || !(recEnd > recStart)) return;
+
+      const distanceKm = (steps * strideM) / 1000;
+      const timeSec = (recEnd - recStart) / 1000;
+      totalCalories += calculateCalories(distanceKm, timeSec, weightKg);
     });
 
-    return { totalCalories: Math.round(totalCalories), available: true, error: null };
+    if (!strideM || !weightKg) {
+      logEvent('GoogleFit', 'Passos lidos mas sem altura/peso no perfil para converter em calorias.', { totalSteps });
+    }
+
+    return { totalCalories: Math.round(totalCalories), totalSteps, available: true, error: null };
   } catch (error) {
     // Diagnóstico detalhado no relatório de erros (mensagem/código reais do
     // erro nativo), mas a mensagem mostrada na app mantém-se simples, como já
     // acontecia — para não mudar o comportamento visível existente.
     logEvent('GoogleFit', 'Exceção ao comunicar com o Google Fit / Health Connect', error);
-    return { totalCalories: 0, available: false, error: 'Erro ao ler dados do Google Fit.' };
+    return { totalCalories: 0, totalSteps: 0, available: false, error: 'Erro ao ler dados do Google Fit.' };
   }
 };
 
@@ -179,7 +222,7 @@ export const fetchGoogleFitCaloriesToday = async (excludeIntervals = []) => {
 export const computeDailyEnergySummary = async (profile, history) => {
   const bmr = calculateBMR(profile);
   const appSummary = getAppExerciseSummaryToday(history);
-  const fitResult = await fetchGoogleFitCaloriesToday(appSummary.intervals);
+  const fitResult = await fetchGoogleFitStepsCaloriesToday(appSummary.intervals, profile);
 
   const total = bmr + appSummary.totalCalories + fitResult.totalCalories;
 
@@ -188,6 +231,7 @@ export const computeDailyEnergySummary = async (profile, history) => {
     appExerciseCalories: appSummary.totalCalories,
     appWorkoutCount: appSummary.workoutCount,
     fitCalories: fitResult.totalCalories,
+    fitSteps: fitResult.totalSteps,
     fitAvailable: fitResult.available,
     fitError: fitResult.error,
     total: Math.round(total),

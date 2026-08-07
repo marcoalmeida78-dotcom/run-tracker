@@ -129,3 +129,29 @@ export const classifyWHR = (waistCm, hipCm, gender) => {
     isElevated,
   };
 };
+
+/**
+ * Rácio Cintura-Altura (WHtR) — Ashwell Shape Chart (Ashwell & Hsieh, 1995;
+ * Ashwell, 1996), o mesmo usado como referência pelo NICE (Reino Unido) e
+ * amplamente citado. Vantagem sobre o IMC/WHR: usa o MESMO limiar universal
+ * (0.5) para qualquer idade, sexo ou etnia — resumido na frase "mantém a
+ * cintura a menos de metade da tua altura". Usa os 3 limiares clássicos do
+ * gráfico original (0.4 / 0.5 / 0.6), não a versão mais recente e mais
+ * granular (Ashwell-Browning, 2014), para ficar simples e bem estabelecido.
+ */
+export const classifyWHtR = (waistCm, heightCm) => {
+  if (!waistCm || !heightCm) return null;
+  const whtr = waistCm / heightCm;
+
+  let label = 'Saudável';
+  if (whtr < 0.4) label = 'Baixo (magreza)';
+  else if (whtr < 0.5) label = 'Saudável';
+  else if (whtr < 0.6) label = 'Risco aumentado';
+  else label = 'Risco elevado';
+
+  return {
+    whtr: Math.round(whtr * 100) / 100,
+    label,
+    isElevated: whtr >= 0.5,
+  };
+};

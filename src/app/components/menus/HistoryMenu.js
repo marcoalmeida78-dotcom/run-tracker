@@ -5,7 +5,7 @@ export default function HistoryMenu({ styles, onClose, history, onDeleteHistoryI
   return (
     <View style={styles.accordionBodyGrid}>
       <View style={styles.submenuHeader}>
-        <Text style={styles.submenuHeaderText}>SUBMENU: 05 - HISTÓRICO</Text>
+        <Text style={styles.submenuHeaderText}>SUBMENU: 06 - HISTÓRICO</Text>
         <TouchableOpacity onPress={onClose}>
           <Text style={styles.submenuCloseText}>▲ FECHAR</Text>
         </TouchableOpacity>
@@ -26,9 +26,12 @@ export default function HistoryMenu({ styles, onClose, history, onDeleteHistoryI
             </View>
             {item.failed && (
               <Text style={styles.historyFailedBadge}>
-                Não concluído — parou no bloco {item.failedAtBlock} / 10
+                {item.failedAtBlock != null
+                  ? `Não concluído — parou no bloco ${item.failedAtBlock} / 10`
+                  : 'Não concluído'}
               </Text>
             )}
+
             <Text style={styles.historySub}>Distância: {item.distanceKm} km | Tempo: {formatHMS(item.timeSec)}</Text>
           </View>
         ))

@@ -26,7 +26,7 @@ import {
 import { BleManager } from 'react-native-ble-plx';
 import { LineChart } from 'react-native-chart-kit';
 import { calculateBMR, computeDailyEnergySummary, suggestDailyWaterMl } from '../../utils/healthCalculations';
-import { classifyBMI, classifyWHR, computeBodyComposition } from '../../utils/bodyComposition';
+import { classifyBMI, classifyWHR, classifyWHtR, computeBodyComposition } from '../../utils/bodyComposition';
 import { computeMovingAverageWeight, computeTrendAlert, estimateGoalProgress } from '../../utils/healthTrends';
 import { calculateFcMaxTanaka } from '../../utils/cooperTest';
 import { cancelWeighInReminder, getWeighInReminderStatus, scheduleWeighInReminder } from '../../utils/healthReminders';
@@ -203,6 +203,12 @@ export default function HealthMenu({ colors, profile, history, onSaveProfile, on
   const latestMeasurement = measurements[0] || null;
   const whrInfo = useMemo(
     () => (latestMeasurement ? classifyWHR(latestMeasurement.waist, latestMeasurement.hip, profile?.gender) : null),
+    [latestMeasurement, profile]
+  );
+  // WHtR só precisa da cintura (já recolhida acima) + altura do perfil — não
+  // precisa de nenhum campo novo, ao contrário do WHR que também usa a anca.
+  const whtrInfo = useMemo(
+    () => (latestMeasurement ? classifyWHtR(latestMeasurement.waist, parseFloat(profile?.height)) : null),
     [latestMeasurement, profile]
   );
 
@@ -510,6 +516,7 @@ export default function HealthMenu({ colors, profile, history, onSaveProfile, on
     }
     if (bmiInfo) lines.push(`IMC: ${bmiInfo.bmi} (${bmiInfo.label})`);
     if (whrInfo) lines.push(`Rácio cintura-anca: ${whrInfo.whr} (${whrInfo.label})`);
+    if (whtrInfo) lines.push(`Rácio cintura-altura: ${whtrInfo.whtr} (${whtrInfo.label})`);
     if (latestVo2) lines.push(`VO2 Máx: ${latestVo2.value} ml/kg/min (${latestVo2.title})`);
     if (fcMax != null) lines.push(`FC Máx (Tanaka): ${fcMax} bpm`);
     if (trendAlert) lines.push('', `Tendência: ${trendAlert.message}`);
@@ -521,6 +528,7 @@ export default function HealthMenu({ colors, profile, history, onSaveProfile, on
       );
     }
     lines.push('', `TMB: ${summary?.bmr ?? bmrOnly} kcal`, `Gasto total hoje: ${summary?.total ?? bmrOnly} kcal`);
+    if (summary?.fitSteps) lines.push(`Passos hoje (Google Fit): ${summary.fitSteps}`);
     if (waterSuggestion) lines.push(`Água sugerida hoje: ${(waterSuggestion / 1000).toFixed(1)} L`);
     lines.push('', '(Estimativas geradas pela app — não substituem avaliação médica.)');
 
@@ -559,9 +567,12 @@ export default function HealthMenu({ colors, profile, history, onSaveProfile, on
           <Text style={s.breakdownValue}>+{summary?.appExerciseCalories ?? 0} kcal</Text>
         </View>
         <View style={s.breakdownRow}>
-          <Text style={s.breakdownLabel}>📱 Google Fit (sem repetir)</Text>
+          <Text style={s.breakdownLabel}>📱 Google Fit (passos, sem repetir)</Text>
           <Text style={s.breakdownValue}>+{summary?.fitCalories ?? 0} kcal</Text>
         </View>
+        {summary?.fitSteps != null && summary.fitSteps > 0 && (
+          <Text style={s.fitStepsHint}>👣 {summary.fitSteps.toLocaleString('pt-PT')} passos hoje (Google Fit)</Text>
+        )}
 
         {summary?.fitError && <Text style={s.warningText}>⚠️ {summary.fitError}</Text>}
 
@@ -779,17 +790,28 @@ export default function HealthMenu({ colors, profile, history, onSaveProfile, on
         {showDebug && liveReading?.hex && <Text style={s.debugText}>{liveReading.hex}</Text>}
       </View>
 
-      {/* MEDIDAS CORPORAIS — cintura/anca, para o rácio cintura-anca (WHR) */}
+      {/* MEDIDAS CORPORAIS — cintura/anca, para o rácio cintura-anca (WHR) e
+          cintura-altura (WHtR, só precisa da cintura + altura do perfil). */}
       <View style={s.card}>
         <Text style={s.cardTitle}>📏 MEDIDAS CORPORAIS</Text>
         <Text style={s.compositionDisclaimer}>
-          Rácio cintura-anca (OMS) — mede com a fita métrica esticada, sem apertar.
+          Rácio cintura-anca (OMS) e cintura-altura (Ashwell) — mede com a fita métrica esticada, sem apertar.
         </Text>
 
-        {whrInfo && (
-          <View style={[s.whrBox, whrInfo.isElevated && s.whrBoxElevated]}>
-            <Text style={s.whrValue}>WHR: {whrInfo.whr}</Text>
-            <Text style={s.whrLabel}>{whrInfo.label}</Text>
+        {(whrInfo || whtrInfo) && (
+          <View style={s.whrRow}>
+            {whrInfo && (
+              <View style={[s.whrBox, whrInfo.isElevated && s.whrBoxElevated]}>
+                <Text style={s.whrValue}>WHR: {whrInfo.whr}</Text>
+                <Text style={s.whrLabel}>{whrInfo.label}</Text>
+              </View>
+            )}
+            {whtrInfo && (
+              <View style={[s.whrBox, whtrInfo.isElevated && s.whrBoxElevated]}>
+                <Text style={s.whrValue}>WHtR: {whtrInfo.whtr}</Text>
+                <Text style={s.whrLabel}>{whtrInfo.label}</Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -966,6 +988,7 @@ const buildStyles = (colors = {}) =>
     breakdownLabel: { color: colors.COLOR_SECONDARY || '#cbd5e1', fontSize: 12 },
     breakdownValue: { color: colors.COLOR_PRIMARY || '#fff', fontSize: 12, fontWeight: '700' },
     warningText: { color: colors.COLOR_RED_ACCENT || '#f87171', fontSize: 11, marginTop: 8 },
+    fitStepsHint: { color: colors.COLOR_SECONDARY || '#94a3b8', fontSize: 10, marginTop: -2, marginBottom: 4 },
     refreshBtn: { marginTop: 10, alignSelf: 'flex-start' },
     refreshBtnText: { color: colors.COLOR_LIME_ENERGY || '#a3e635', fontSize: 12, fontWeight: '700' },
 
@@ -1146,8 +1169,10 @@ const buildStyles = (colors = {}) =>
     progressText: { color: colors.COLOR_PRIMARY || '#fff', fontSize: 11, fontWeight: '700', marginTop: 6 },
     progressSubText: { color: colors.COLOR_SECONDARY || '#94a3b8', fontSize: 10, marginTop: 2 },
 
-    // --- WHR ---
+    // --- WHR / WHtR ---
+    whrRow: { flexDirection: 'row', gap: 8 },
     whrBox: {
+      flex: 1,
       backgroundColor: colors.COLOR_CARD_BG || 'rgba(255,255,255,0.08)',
       borderRadius: 12,
       paddingVertical: 8,
