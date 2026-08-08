@@ -143,6 +143,57 @@ function DebugReportSection({ styles }) {
   );
 }
 
+// Cópia de segurança: exporta todos os dados como texto (via partilha nativa)
+// e permite restaurá-los colando esse texto de volta. Sem dependências novas
+// (ver nota completa em index.js, junto a handleExportBackup/handleImportBackup).
+function BackupSection({ styles, onExportBackup, onImportBackup }) {
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState('');
+
+  const handleImportPress = () => {
+    if (!importText.trim()) {
+      Alert.alert('Nada para importar', 'Cola primeiro o texto da cópia de segurança na caixa.');
+      return;
+    }
+    onImportBackup(importText.trim());
+  };
+
+  return (
+    <>
+      <View style={styles.divider} />
+      <Text style={styles.sectionSubTitle}>CÓPIA DE SEGURANÇA</Text>
+      <Text style={styles.tileSubDark}>
+        Exporta todos os teus dados (perfil, histórico, balança, objetivos, medidas) como texto —
+        guarda-o nas Notas, envia por email, etc. Para restaurar, cola esse texto aqui e importa.
+      </Text>
+
+      <TouchableOpacity style={styles.itemBtn} onPress={onExportBackup}>
+        <Text style={styles.itemBtnText}>📤 Exportar Todos os Dados</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.itemBtn} onPress={() => setShowImport(!showImport)}>
+        <Text style={styles.itemBtnText}>{showImport ? '▲ Esconder' : '▼ Restaurar'} a partir de uma cópia</Text>
+      </TouchableOpacity>
+
+      {showImport && (
+        <View style={styles.accordionBodyGrid}>
+          <TextInput
+            style={[styles.input, { height: 100, textAlignVertical: 'top' }]}
+            placeholder="Cola aqui o texto exportado anteriormente..."
+            placeholderTextColor={styles.inputLabel?.color}
+            multiline
+            value={importText}
+            onChangeText={setImportText}
+          />
+          <TouchableOpacity style={[styles.itemBtn, { marginTop: 8, marginBottom: 0 }]} onPress={handleImportPress}>
+            <Text style={styles.itemBtnText}>Importar e Substituir Dados Atuais</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </>
+  );
+}
+
 export default function SettingsMenu({
   styles,
   onClose,
@@ -151,6 +202,8 @@ export default function SettingsMenu({
   profile,
   onSaveProfile,
   onResetAllData,
+  onExportBackup,
+  onImportBackup,
   fogOpacity,
   onChangeFogOpacity,
 }) {
@@ -240,6 +293,8 @@ export default function SettingsMenu({
       </View>
 
       <DebugReportSection styles={styles} />
+
+      <BackupSection styles={styles} onExportBackup={onExportBackup} onImportBackup={onImportBackup} />
 
       <View style={styles.divider} />
       <TouchableOpacity style={styles.dangerBtn} onPress={onResetAllData}>

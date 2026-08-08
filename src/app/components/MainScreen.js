@@ -1,6 +1,5 @@
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { RUN_PROGRAM_LEVELS } from '../constants/runProgram';
-import { THEMES } from '../constants/themes';
 import ChallengesMenu from './menus/ChallengesMenu';
 import HealthMenu from './menus/HealthMenu';
 import HistoryMenu from './menus/HistoryMenu';
@@ -48,8 +47,8 @@ export default function MainScreen({
     return '#ef4444'; // Vermelho
   };
 
-  // Ponto 7: Título sempre com a cor do tema "vidro branco"
-  const titleColor = THEMES.vidroBranco?.COLOR_TEXT_PRIMARY || '#ffffff';
+  // Título sempre com cor branca fixa (independente do tema ativo).
+  const titleColor = '#ffffff';
 
   return (
     <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -170,8 +169,10 @@ export default function MainScreen({
         onPress={() => onToggleAccordion('historico')}
       >
         <View style={styles.cardHeaderRow}>
-          <Text style={styles.tileNumberPrimary}>06</Text>
-          <Text style={styles.cardHeaderTitleDark}>HISTÓRICO DE EXERCÍCIOS</Text>
+          <View>
+            <Text style={styles.tileNumberPrimary}>06</Text>
+            <Text style={styles.cardHeaderTitleDark}>HISTÓRICO DE EXERCÍCIOS</Text>
+          </View>
           <Text style={styles.accordionIcon}>{activeMenu === 'historico' ? '▲ FECHAR' : '▼ VER'}</Text>
         </View>
         <Text style={styles.recommendationTextDark}>{history.length} treinos registados no total</Text>
@@ -188,12 +189,14 @@ export default function MainScreen({
 
       {/* --- SAÚDE & METABOLISMO (menu isolado: ver components/menus/HealthMenu.js) --- */}
       <TouchableOpacity
-        style={[styles.bentoHeroBottom, activeMenu === 'saude' && styles.activeBentoTileHighlight, { marginTop: 12 }]}
+        style={[styles.bentoHeroBottom, activeMenu === 'saude' && styles.activeBentoTileHighlight]}
         onPress={() => onToggleAccordion('saude')}
       >
         <View style={styles.cardHeaderRow}>
-          <Text style={styles.tileNumberPrimary}>07</Text>
-          <Text style={styles.cardHeaderTitleDark}>SAÚDE & METABOLISMO</Text>
+          <View>
+            <Text style={styles.tileNumberPrimary}>07</Text>
+            <Text style={styles.cardHeaderTitleDark}>SAÚDE & METABOLISMO</Text>
+          </View>
           <Text style={styles.accordionIcon}>{activeMenu === 'saude' ? '▲ FECHAR' : '▼ ABRIR'}</Text>
         </View>
         <Text style={styles.recommendationTextDark}>TMB, Balança Xiaomi e Google Fit</Text>
@@ -210,7 +213,7 @@ export default function MainScreen({
       )}
 
       {/* --- BARRA DE ENERGIA DO PLANO --- */}
-      <TouchableOpacity style={[styles.batterySectionTouchable, { marginTop: 12 }]} onPress={onShowBatteryInfo}>
+      <TouchableOpacity style={styles.batterySectionTouchable} onPress={onShowBatteryInfo}>
         <View style={styles.batteryTitleRow}>
           <Text style={styles.tileNumberPrimary}>08</Text>
           <Text style={styles.batterySectionTitle}>BARRA DE ENERGIA DO PLANO (75 SESSÕES)</Text>

@@ -987,7 +987,14 @@ const buildStyles = (colors = {}) =>
     breakdownRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
     breakdownLabel: { color: colors.COLOR_SECONDARY || '#cbd5e1', fontSize: 12 },
     breakdownValue: { color: colors.COLOR_PRIMARY || '#fff', fontSize: 12, fontWeight: '700' },
-    warningText: { color: colors.COLOR_RED_ACCENT || '#f87171', fontSize: 11, marginTop: 8 },
+    warningText: {
+      color: colors.COLOR_RED_ACCENT || '#f87171',
+      fontSize: 11,
+      marginTop: 8,
+      textShadowColor: 'rgba(255,255,255,0.6)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 3,
+    },
     fitStepsHint: { color: colors.COLOR_SECONDARY || '#94a3b8', fontSize: 10, marginTop: -2, marginBottom: 4 },
     refreshBtn: { marginTop: 10, alignSelf: 'flex-start' },
     refreshBtnText: { color: colors.COLOR_LIME_ENERGY || '#a3e635', fontSize: 12, fontWeight: '700' },
@@ -1044,7 +1051,14 @@ const buildStyles = (colors = {}) =>
     },
     scaleHistoryWeight: { color: colors.COLOR_PRIMARY || '#fff', fontWeight: '700', fontSize: 14 },
     scaleHistoryMeta: { color: colors.COLOR_SECONDARY || '#94a3b8', fontSize: 11 },
-    deleteText: { color: colors.COLOR_RED_ACCENT || '#f87171', fontSize: 11, fontWeight: '700' },
+    deleteText: {
+      color: colors.COLOR_RED_ACCENT || '#f87171',
+      fontSize: 11,
+      fontWeight: '700',
+      textShadowColor: 'rgba(255,255,255,0.6)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 3,
+    },
 
     debugToggleText: { color: colors.COLOR_SECONDARY || '#64748b', fontSize: 10 },
     debugText: {

@@ -12,6 +12,7 @@ import {
   ImageBackground,
   Platform,
   SafeAreaView,
+  Share,
   StatusBar,
   Vibration,
   View,
@@ -80,12 +81,10 @@ export default function App() {
 
   const [isMapReady, setIsMapReady] = useState(false);
 
-  const [vo2MaxResult, setVo2MaxResult] = useState(null);
-  const [best10MinDist, setBest10MinDist] = useState(null);
-  const [bestEsquinaDist, setBestEsquinaDist] = useState(null);
-  const [bestCooperDist, setBestCooperDist] = useState(null);
-  const [best15MilhasSec, setBest15MilhasSec] = useState(null);
-  const [best1MilhaSec, setBest1MilhaSec] = useState(null);
+  // Nota: vo2MaxResult também era estado morto (calculado mas nunca
+  // mostrado) — foi removido; o VO2 Máx destes desafios já é visível através
+  // do cartão "VO2 Máx mais recente" no menu Saúde (e passa a ganhar um modal
+  // de resultado próprio — ver finalizePendingTest).
   
   const [suddenDeathBlock, setSuddenDeathBlock] = useState(1);
   const suddenDeathBlockRef = useRef(1);
@@ -347,31 +346,16 @@ export default function App() {
   };
 
   const updateRecordsFromHistory = (histList) => {
-    const tenMinWorkouts = histList.filter(item => item.title === 'Desafio 10 Minutos');
-    setBest10MinDist(tenMinWorkouts.length > 0 ? Math.max(...tenMinWorkouts.map(item => parseFloat(item.distanceKm) || 0)).toFixed(2) : null);
-
-    const esquinaWorkouts = histList.filter(item => item.title.includes('Esquina'));
-    setBestEsquinaDist(esquinaWorkouts.length > 0 ? Math.max(...esquinaWorkouts.map(item => parseFloat(item.distanceKm) || 0)).toFixed(2) : null);
-
-    const cooperWorkouts = histList.filter(item => item.title.includes('Cooper'));
-    setBestCooperDist(cooperWorkouts.length > 0 ? Math.max(...cooperWorkouts.map(item => parseFloat(item.distanceKm) || 0)).toFixed(2) : null);
-
-    const m15Workouts = histList.filter(item => item.title.includes('1,5 Milhas'));
-    if (m15Workouts.length > 0) {
-      const minSec = Math.min(...m15Workouts.map(item => parseInt(item.timeSec, 10) || 999999));
-      setBest15MilhasSec(minSec !== 999999 ? minSec : null);
-    } else {
-      setBest15MilhasSec(null);
-    }
-
+    // Só a referência da 1 Milha é realmente usada (na motivação por voz a
+    // cada 250m — ver check1MilhaAudioMotivation). Os restantes "melhores"
+    // que existiam aqui (10 min, Esquina, Cooper, 1,5 Milhas) eram calculados
+    // mas nunca chegavam a ser mostrados em lado nenhum — foram removidos
+    // (ver ponto 16.2 da documentação técnica).
     const m1Workouts = histList.filter(item => item.title.includes('1 Milha'));
     if (m1Workouts.length > 0) {
       const minSec = Math.min(...m1Workouts.map(item => parseInt(item.timeSec, 10) || 999999));
-      const val = minSec !== 999999 ? minSec : null;
-      setBest1MilhaSec(val);
-      best1MilhaSecRef.current = val;
+      best1MilhaSecRef.current = minSec !== 999999 ? minSec : null;
     } else {
-      setBest1MilhaSec(null);
       best1MilhaSecRef.current = null;
     }
   };
@@ -677,7 +661,6 @@ export default function App() {
     setSeconds(0);
     setDistance(0);
     setSpeed(0);
-    setVo2MaxResult(null);
     setShowEsquinaModal(false);
     esquinaTargetMultiplierRef.current = 1;
     hasGoneBackgroundRef.current = false;
@@ -1009,12 +992,20 @@ export default function App() {
     const previousBestSec = getBestTimeForTitle(history, title);
     const isNewPersonalBest = previousBestSec !== null && finalSec > 0 && finalSec < previousBestSec;
 
-    // --- Teste de Cooper e Desafio Rockport: em vez de guardar já o registo,
-    // pede-se primeiro os batimentos cardíacos (modal em AppModals.js), para
-    // calcular o VO2 Máx (Rockport precisa mesmo dos batimentos; Cooper usa
-    // só a distância, mas os batimentos servem para a zona de intensidade).
-    // O registo só é guardado depois, em handleSubmitHeartRate/handleSkipHeartRate.
-    if (type === 'walk_rockport' || type === 'challenge_cooper') {
+    // --- Teste de Cooper, Desafio Rockport, 1,5 Milhas e 1 Milha: em vez de
+    // guardar já o registo, pede-se primeiro os batimentos cardíacos (modal
+    // em AppModals.js) — Rockport precisa mesmo dos batimentos para o VO2
+    // Máx; os outros três já o calculam só com a distância/tempo, mas os
+    // batimentos dão sempre a zona de intensidade + FC Máx, e este resultado
+    // fica agora visível num modal para os quatro (antes só Cooper/Rockport
+    // tinham isto — 1,5 Milhas/1 Milha calculavam o VO2 Máx sem o mostrar a
+    // ninguém). O registo só é guardado depois, em finalizePendingTest.
+    if (
+      type === 'walk_rockport' ||
+      type === 'challenge_cooper' ||
+      type === 'challenge_1.5m' ||
+      type === 'challenge_1milha'
+    ) {
       playAudio('Parabéns! Completou o treino com sucesso!');
       if (isNewPersonalBest) {
         Vibration.vibrate([200, 100, 200, 100, 200]);
@@ -1030,13 +1021,6 @@ export default function App() {
 
     let vo2Val = null;
     let finishMessage = 'Parabéns! Completou o treino com sucesso!';
-    if (type === 'challenge_1.5m') {
-      vo2Val = calculate15MilesVo2Max(finalSec);
-      setVo2MaxResult(vo2Val);
-    } else if (type === 'challenge_1milha') {
-      vo2Val = calculate1MileRunVo2Max(finalSec, profile);
-      setVo2MaxResult(vo2Val);
-    }
     playAudio(finishMessage);
 
     if (isNewPersonalBest) {
@@ -1100,6 +1084,10 @@ export default function App() {
       const distanceM = finalDist * 1000;
       vo2Val = calculateCooperVo2Max(distanceM);
       cooperClassification = classifyCooperDistance(distanceM, parseFloat(profile.age), profile.gender);
+    } else if (type === 'challenge_1.5m') {
+      vo2Val = calculate15MilesVo2Max(finalSec);
+    } else if (type === 'challenge_1milha') {
+      vo2Val = calculate1MileRunVo2Max(finalSec, profile);
     }
 
     const zone = heartRateBpm ? classifyHeartRateZone(heartRateBpm, fcMax) : null;
@@ -1200,16 +1188,116 @@ export default function App() {
           setCompletedSessions([]);
           setCurrentSessionIndex(0);
           setActiveLevelAccordion(1);
-          setBest10MinDist(null);
-          setBestEsquinaDist(null);
-          setBestCooperDist(null);
-          setBest15MilhasSec(null);
-          setBest1MilhaSec(null);
           best1MilhaSecRef.current = null;
           Alert.alert('Aplicação Reiniciada', 'Todos os registos foram limpos.');
         }
       }
     ]);
+  };
+
+  // --- CÓPIA DE SEGURANÇA (exportar/importar todos os dados) ---
+  // A app não tem nenhuma dependência de acesso a ficheiros/clipboard
+  // instalada (expo-file-system, expo-document-picker, expo-clipboard) —
+  // para não acrescentar dependências nativas novas numa versão que se quer
+  // estável, a exportação usa a partilha nativa já existente (Share, como já
+  // é usado no relatório de erros e no relatório de saúde) para enviar um
+  // texto JSON, e a importação é feita colando esse texto de volta numa
+  // caixa de texto (ver SettingsMenu.js).
+  const BACKUP_KEYS = [
+    '@user_theme',
+    '@fog_opacity',
+    '@user_profile',
+    '@user_history',
+    '@current_session_index',
+    '@completed_sessions',
+    '@battery_optimization_warned',
+    '@health_scale_history',
+    '@health_weight_goal',
+    '@health_body_measurements',
+  ];
+
+  const handleExportBackup = async () => {
+    try {
+      const pairs = await AsyncStorage.multiGet(BACKUP_KEYS);
+      const backup = { app: 'Zero aos 5K', exportedAt: new Date().toISOString(), data: {} };
+      pairs.forEach(([key, value]) => {
+        if (value !== null) backup.data[key] = value;
+      });
+      await Share.share({ message: JSON.stringify(backup) });
+    } catch (e) {
+      Alert.alert('Erro', 'Não foi possível exportar os dados.');
+    }
+  };
+
+  const handleImportBackup = (jsonText) => {
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch (e) {
+      Alert.alert('Texto Inválido', 'O texto colado não é uma cópia de segurança válida (JSON inválido).');
+      return;
+    }
+    if (!parsed?.data || typeof parsed.data !== 'object') {
+      Alert.alert('Texto Inválido', 'O texto colado não parece ser uma cópia de segurança desta app.');
+      return;
+    }
+
+    Alert.alert(
+      'Importar Dados',
+      'Isto vai SUBSTITUIR todos os dados atuais (perfil, histórico, tema, balança, objetivos, medidas) pelos dados da cópia de segurança. Queres continuar?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Importar e Substituir',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const entries = Object.entries(parsed.data).filter(([key]) => BACKUP_KEYS.includes(key));
+              if (entries.length === 0) {
+                Alert.alert('Nada para Importar', 'A cópia de segurança não continha nenhum dado reconhecido.');
+                return;
+              }
+              await AsyncStorage.multiSet(entries);
+
+              // Atualiza já o estado que o index.js controla diretamente. O
+              // resto (balança, objetivo de peso, medidas) vive dentro do
+              // menu Saúde e recarrega sozinho da próxima vez que esse menu
+              // for aberto, porque já lê do armazenamento sempre que monta.
+              const dataMap = Object.fromEntries(entries);
+              if (dataMap['@user_theme'] && THEMES[dataMap['@user_theme']]) setCurrentTheme(dataMap['@user_theme']);
+              if (dataMap['@fog_opacity']) {
+                const parsedOpacity = parseFloat(dataMap['@fog_opacity']);
+                if (!isNaN(parsedOpacity)) setFogOpacity(Math.max(0, Math.min(1, parsedOpacity)));
+              }
+              if (dataMap['@user_profile']) {
+                try { setProfile(JSON.parse(dataMap['@user_profile'])); } catch (e) {}
+              }
+              if (dataMap['@user_history']) {
+                try {
+                  const importedHistory = JSON.parse(dataMap['@user_history']);
+                  setHistory(importedHistory);
+                  updateRecordsFromHistory(importedHistory);
+                } catch (e) {}
+              }
+              if (dataMap['@current_session_index']) {
+                const idx = parseInt(dataMap['@current_session_index'], 10);
+                if (!isNaN(idx)) setCurrentSessionIndex(idx);
+              }
+              if (dataMap['@completed_sessions']) {
+                try { setCompletedSessions(JSON.parse(dataMap['@completed_sessions'])); } catch (e) {}
+              }
+
+              Alert.alert(
+                'Importação Concluída',
+                'Os dados foram restaurados. Se tinhas o menu Saúde aberto, fecha-o e volta a abri-lo para veres a balança/objetivos/medidas atualizados.'
+              );
+            } catch (e) {
+              Alert.alert('Erro', 'Não foi possível importar os dados.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   // Ponto 4: Conta DIAS DISTINTOS (não o nº de treinos) com pelo menos um exercício
@@ -1314,6 +1402,8 @@ export default function App() {
           profile={profile}
           onSaveProfile={saveProfileData}
           onResetAllData={handleResetAllData}
+          onExportBackup={handleExportBackup}
+          onImportBackup={handleImportBackup}
           history={history}
           onDeleteHistoryItem={handleDeleteHistoryItem}
           onShowBatteryInfo={() => setShowBatteryInfoModal(true)}

@@ -1,6 +1,7 @@
+import { useMemo } from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { LEAFLET_MAP_HTML } from '../constants/mapHtml';
+import { getLeafletMapHtml } from '../constants/mapHtml';
 import { calculateCalories, formatHMS } from '../utils/calculations';
 
 export default function ActiveExerciseScreen({
@@ -30,6 +31,12 @@ export default function ActiveExerciseScreen({
   bestTimeSec,
   bestCooperClassification,
 }) {
+  // Cor da rota do mapa a seguir o tema ativo, em vez de ficar sempre fixa
+  // (ver ponto 16.7 da documentação técnica). Memoizado porque este ecrã
+  // re-renderiza a cada segundo/atualização de GPS durante o exercício, e o
+  // HTML só precisa de mudar quando o tema muda.
+  const mapHtml = useMemo(() => getLeafletMapHtml(colors?.COLOR_LIME_ENERGY), [colors]);
+
   return (
     <ScrollView contentContainerStyle={styles.activeExerciseScroll}>
       {/* Ponto 5: Aviso de Falta de GPS / Rede no topo do menu ativo */}
@@ -66,7 +73,7 @@ export default function ActiveExerciseScreen({
         <WebView
           ref={webviewRef}
           originWhitelist={['*']}
-          source={{ html: LEAFLET_MAP_HTML }}
+          source={{ html: mapHtml }}
           style={styles.map}
           javaScriptEnabled={true}
           domStorageEnabled={true}
@@ -90,7 +97,18 @@ export default function ActiveExerciseScreen({
           </View>
           <View style={styles.recordHighlightBox}>
             <Text style={styles.recordTitle}>CONTAGEM DECRESCENTE DO BLOCO</Text>
-            <Text style={{ fontSize: 28, fontWeight: 'bold', color: '#ef4444', textAlign: 'center', marginTop: 4 }}>
+            <Text
+              style={{
+                fontSize: 28,
+                fontWeight: 'bold',
+                color: '#ef4444',
+                textAlign: 'center',
+                marginTop: 4,
+                textShadowColor: 'rgba(255,255,255,0.6)',
+                textShadowOffset: { width: 0, height: 1 },
+                textShadowRadius: 3,
+              }}
+            >
               {formatHMS(suddenDeathBlockSecondsLeft ?? 0)}
             </Text>
           </View>

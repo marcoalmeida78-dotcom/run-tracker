@@ -1,5 +1,9 @@
 // --- HTML DO MAPA (Leaflet + tiles OpenStreetMap Standard) ---
-export const LEAFLET_MAP_HTML = `
+// Função (não uma string fixa) para a cor da rota poder seguir o tema ativo
+// da app, em vez de ficar sempre fixa no verde do tema "Sálvia & Menta".
+export const getLeafletMapHtml = (routeColor) => {
+  const color = routeColor || '#2D4A3E';
+  return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -20,7 +24,7 @@ export const LEAFLET_MAP_HTML = `
       maxZoom: 19
     }).addTo(map);
 
-    var routeLine = L.polyline([], { color: '#2D4A3E', weight: 4 }).addTo(map);
+    var routeLine = L.polyline([], { color: '${color}', weight: 4 }).addTo(map);
     var marker = null;
     var hasCentered = false;
 
@@ -30,7 +34,7 @@ export const LEAFLET_MAP_HTML = `
       if (current) {
         if (!marker) {
           marker = L.circleMarker([current.lat, current.lng], {
-            radius: 8, color: '#ffffff', weight: 2, fillColor: '#2D4A3E', fillOpacity: 1
+            radius: 8, color: '#ffffff', weight: 2, fillColor: '${color}', fillOpacity: 1
           }).addTo(map);
         } else {
           marker.setLatLng([current.lat, current.lng]);
@@ -53,3 +57,4 @@ export const LEAFLET_MAP_HTML = `
 </body>
 </html>
 `;
+};
