@@ -66,7 +66,7 @@
           }
         }
       ],
-      "./plugins/withHealthConnectFix.js"
+      "./src/app/plugins/withHealthConnectFix.js"
     ],
     "extra": {
       "eas": {
