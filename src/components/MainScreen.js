@@ -1,14 +1,12 @@
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { RUN_PROGRAM_LEVELS } from '../constants/runProgram';
 import ChallengesMenu from './menus/ChallengesMenu';
-import HealthMenu from './menus/HealthMenu';
 import HistoryMenu from './menus/HistoryMenu';
 import RunProgramMenu from './menus/RunProgramMenu';
 import SettingsMenu from './menus/SettingsMenu';
 import WalksMenu from './menus/WalksMenu';
 
 export default function MainScreen({
-  colors,
   styles,
 
   currentSessionIndex,
@@ -30,6 +28,10 @@ export default function MainScreen({
   profile,
   onSaveProfile,
   onResetAllData,
+  onExportBackup,
+  onImportBackup,
+  healthSyncEnabled,
+  onToggleHealthSync,
 
   history,
   onDeleteHistoryItem,
@@ -158,6 +160,10 @@ export default function MainScreen({
           profile={profile}
           onSaveProfile={onSaveProfile}
           onResetAllData={onResetAllData}
+          onExportBackup={onExportBackup}
+          onImportBackup={onImportBackup}
+          healthSyncEnabled={healthSyncEnabled}
+          onToggleHealthSync={onToggleHealthSync}
           fogOpacity={fogOpacity}
           onChangeFogOpacity={onChangeFogOpacity}
         />
@@ -187,35 +193,10 @@ export default function MainScreen({
         />
       )}
 
-      {/* --- SAÚDE & METABOLISMO (menu isolado: ver components/menus/HealthMenu.js) --- */}
-      <TouchableOpacity
-        style={[styles.bentoHeroBottom, activeMenu === 'saude' && styles.activeBentoTileHighlight]}
-        onPress={() => onToggleAccordion('saude')}
-      >
-        <View style={styles.cardHeaderRow}>
-          <View>
-            <Text style={styles.tileNumberPrimary}>07</Text>
-            <Text style={styles.cardHeaderTitleDark}>SAÚDE & METABOLISMO</Text>
-          </View>
-          <Text style={styles.accordionIcon}>{activeMenu === 'saude' ? '▲ FECHAR' : '▼ ABRIR'}</Text>
-        </View>
-        <Text style={styles.recommendationTextDark}>TMB, Balança Xiaomi e Google Fit</Text>
-      </TouchableOpacity>
-
-      {activeMenu === 'saude' && (
-        <HealthMenu
-          colors={colors}
-          profile={profile}
-          history={history}
-          onSaveProfile={onSaveProfile}
-          onClose={() => onToggleAccordion('saude')}
-        />
-      )}
-
       {/* --- BARRA DE ENERGIA DO PLANO --- */}
       <TouchableOpacity style={styles.batterySectionTouchable} onPress={onShowBatteryInfo}>
         <View style={styles.batteryTitleRow}>
-          <Text style={styles.tileNumberPrimary}>08</Text>
+          <Text style={styles.tileNumberPrimary}>07</Text>
           <Text style={styles.batterySectionTitle}>BARRA DE ENERGIA DO PLANO (75 SESSÕES)</Text>
         </View>
         <View style={styles.batteryContainer}>

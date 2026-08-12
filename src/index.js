@@ -23,6 +23,12 @@ import { RUN_PROGRAM_LEVELS, SUDDEN_DEATH_BLOCKS } from './constants/runProgram'
 import { LOCATION_TASK_NAME, setBackgroundLocationHandler } from './tasks/locationTask';
 import { getStyles } from './styles/styles';
 import {
+  isHealthConnectSyncEnabled,
+  requestHealthConnectWritePermissions,
+  setHealthConnectSyncEnabled,
+  syncExerciseRecordToHealthConnect,
+} from './utils/healthConnectSync';
+import {
   calculateCalories,
   calculateHaversine,
   calculate15MilesVo2Max,
@@ -59,6 +65,9 @@ export default function App() {
   const [showBatteryOptimizationModal, setShowBatteryOptimizationModal] = useState(false);
 
   const [history, setHistory] = useState([]);
+  // Sincronização de treinos com o Google Health Connect, para a app separada
+  // "Saúde & Metabolismo" os conseguir ler (ver utils/healthConnectSync.js).
+  const [healthSyncEnabled, setHealthSyncEnabledState] = useState(false);
   const [currentSessionIndex, setCurrentSessionIndex] = useState(0); 
   const [completedSessions, setCompletedSessions] = useState([]); 
 
@@ -83,7 +92,8 @@ export default function App() {
 
   // Nota: vo2MaxResult também era estado morto (calculado mas nunca
   // mostrado) — foi removido; o VO2 Máx destes desafios já é visível através
-  // do cartão "VO2 Máx mais recente" no menu Saúde (e passa a ganhar um modal
+  // do modal de resultado de cada teste (ver finalizePendingTest) e é
+  // sincronizado com o Health Connect para a app de Saúde o poder ler
   // de resultado próprio — ver finalizePendingTest).
   
   const [suddenDeathBlock, setSuddenDeathBlock] = useState(1);
@@ -245,6 +255,7 @@ export default function App() {
     setHistory(updatedHistory);
     updateRecordsFromHistory(updatedHistory);
     await AsyncStorage.setItem('@user_history', JSON.stringify(updatedHistory));
+    syncExerciseRecordToHealthConnect(newRecord).catch(() => {});
   };
 
   const openBatteryOptimizationSettings = async () => {
@@ -297,6 +308,9 @@ export default function App() {
         if (!isNaN(parsedOpacity)) setFogOpacity(Math.max(0, Math.min(1, parsedOpacity)));
       }
 
+      const syncEnabled = await isHealthConnectSyncEnabled();
+      setHealthSyncEnabledState(syncEnabled);
+
       const savedProfile = await AsyncStorage.getItem('@user_profile');
       const savedHistory = await AsyncStorage.getItem('@user_history');
       const savedSession = await AsyncStorage.getItem('@current_session_index');
@@ -343,6 +357,24 @@ export default function App() {
     const clamped = Math.max(0, Math.min(1, value));
     setFogOpacity(clamped);
     await AsyncStorage.setItem('@fog_opacity', clamped.toString());
+  };
+
+  // Ativa/desativa a sincronização de treinos com o Google Health Connect
+  // (ver utils/healthConnectSync.js). Ao ativar, pede logo as permissões de
+  // escrita — se forem recusadas, a sincronização fica desligada outra vez.
+  const toggleHealthSync = async () => {
+    if (healthSyncEnabled) {
+      setHealthSyncEnabledState(false);
+      await setHealthConnectSyncEnabled(false);
+      return;
+    }
+    const result = await requestHealthConnectWritePermissions();
+    if (!result.success) {
+      Alert.alert('Não foi possível ativar', result.error || 'Tenta novamente.');
+      return;
+    }
+    setHealthSyncEnabledState(true);
+    await setHealthConnectSyncEnabled(true);
   };
 
   const updateRecordsFromHistory = (histList) => {
@@ -971,6 +1003,7 @@ export default function App() {
     setHistory(updatedHistory);
     updateRecordsFromHistory(updatedHistory);
     await AsyncStorage.setItem('@user_history', JSON.stringify(updatedHistory));
+    syncExerciseRecordToHealthConnect(newRecord).catch(() => {});
   };
 
   const autoFinishExercise = async (type, title, finalSec, finalDist, finalSpeed, config) => {
@@ -1032,9 +1065,9 @@ export default function App() {
       id: Date.now().toString(),
       title,
       date: new Date().toLocaleDateString('pt-PT'),
-      // startTime/endTime (ISO): usados apenas pelo menu Saúde para não
-      // contar as mesmas calorias duas vezes com o Google Fit. Não afeta
-      // nenhuma lógica existente do histórico ou das restantes secções.
+      // startTime/endTime (ISO): usados para sincronizar este treino com o
+      // Google Health Connect (ver utils/healthConnectSync.js), para a app
+      // separada de Saúde & Metabolismo o conseguir ler.
       startTime: capturedStartTime ? new Date(capturedStartTime).toISOString() : null,
       endTime: new Date().toISOString(),
       timeSec: finalSec,
@@ -1049,6 +1082,7 @@ export default function App() {
     setHistory(updatedHistory);
     updateRecordsFromHistory(updatedHistory);
     await AsyncStorage.setItem('@user_history', JSON.stringify(updatedHistory));
+    syncExerciseRecordToHealthConnect(newRecord).catch(() => {});
 
     if (type === 'run_program' && config?.sessionIndex !== undefined) {
       const doneIdx = config.sessionIndex;
@@ -1119,6 +1153,7 @@ export default function App() {
     setHistory(updatedHistory);
     updateRecordsFromHistory(updatedHistory);
     await AsyncStorage.setItem('@user_history', JSON.stringify(updatedHistory));
+    syncExerciseRecordToHealthConnect(newRecord).catch(() => {});
 
     if (type === 'run_program' && config?.sessionIndex !== undefined) {
       const doneIdx = config.sessionIndex;
@@ -1211,9 +1246,7 @@ export default function App() {
     '@current_session_index',
     '@completed_sessions',
     '@battery_optimization_warned',
-    '@health_scale_history',
-    '@health_weight_goal',
-    '@health_body_measurements',
+    '@sync_health_connect_enabled',
   ];
 
   const handleExportBackup = async () => {
@@ -1244,7 +1277,7 @@ export default function App() {
 
     Alert.alert(
       'Importar Dados',
-      'Isto vai SUBSTITUIR todos os dados atuais (perfil, histórico, tema, balança, objetivos, medidas) pelos dados da cópia de segurança. Queres continuar?',
+      'Isto vai SUBSTITUIR todos os dados atuais (perfil, histórico, tema, definições) pelos dados da cópia de segurança. Queres continuar?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -1259,10 +1292,7 @@ export default function App() {
               }
               await AsyncStorage.multiSet(entries);
 
-              // Atualiza já o estado que o index.js controla diretamente. O
-              // resto (balança, objetivo de peso, medidas) vive dentro do
-              // menu Saúde e recarrega sozinho da próxima vez que esse menu
-              // for aberto, porque já lê do armazenamento sempre que monta.
+              // Atualiza já o estado que o index.js controla diretamente.
               const dataMap = Object.fromEntries(entries);
               if (dataMap['@user_theme'] && THEMES[dataMap['@user_theme']]) setCurrentTheme(dataMap['@user_theme']);
               if (dataMap['@fog_opacity']) {
@@ -1286,11 +1316,11 @@ export default function App() {
               if (dataMap['@completed_sessions']) {
                 try { setCompletedSessions(JSON.parse(dataMap['@completed_sessions'])); } catch (e) {}
               }
+              if (dataMap['@sync_health_connect_enabled']) {
+                setHealthSyncEnabledState(dataMap['@sync_health_connect_enabled'] === 'true');
+              }
 
-              Alert.alert(
-                'Importação Concluída',
-                'Os dados foram restaurados. Se tinhas o menu Saúde aberto, fecha-o e volta a abri-lo para veres a balança/objetivos/medidas atualizados.'
-              );
+              Alert.alert('Importação Concluída', 'Os dados foram restaurados.');
             } catch (e) {
               Alert.alert('Erro', 'Não foi possível importar os dados.');
             }
@@ -1385,7 +1415,6 @@ export default function App() {
         />
       ) : (
         <MainScreen
-          colors={colors}
           styles={dynamicStyles}
           currentSessionIndex={currentSessionIndex}
           workoutsLast7Days={workoutsLast7Days}
@@ -1404,6 +1433,8 @@ export default function App() {
           onResetAllData={handleResetAllData}
           onExportBackup={handleExportBackup}
           onImportBackup={handleImportBackup}
+          healthSyncEnabled={healthSyncEnabled}
+          onToggleHealthSync={toggleHealthSync}
           history={history}
           onDeleteHistoryItem={handleDeleteHistoryItem}
           onShowBatteryInfo={() => setShowBatteryInfoModal(true)}

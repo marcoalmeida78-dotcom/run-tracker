@@ -143,6 +143,28 @@ function DebugReportSection({ styles }) {
   );
 }
 
+// Sincronização com o Google Health Connect: quando ativada, cada treino
+// concluído é escrito no Health Connect (ExerciseSession + calorias + VO2
+// Máx), para a app separada "Saúde & Metabolismo" o conseguir ler — ver
+// utils/healthConnectSync.js. Só disponível no Android.
+function HealthSyncSection({ styles, healthSyncEnabled, onToggleHealthSync }) {
+  return (
+    <>
+      <View style={styles.divider} />
+      <Text style={styles.sectionSubTitle}>SINCRONIZAÇÃO COM GOOGLE HEALTH CONNECT</Text>
+      <Text style={styles.tileSubDark}>
+        Ativa para que os teus treinos apareçam também na app "Saúde & Metabolismo" (e no Google
+        Health Connect em geral). Só disponível no Android.
+      </Text>
+      <TouchableOpacity style={styles.itemBtn} onPress={onToggleHealthSync}>
+        <Text style={styles.itemBtnText}>
+          {healthSyncEnabled ? '✅ Sincronização Ativada — toca para desligar' : '⬜ Sincronização Desligada — toca para ativar'}
+        </Text>
+      </TouchableOpacity>
+    </>
+  );
+}
+
 // Cópia de segurança: exporta todos os dados como texto (via partilha nativa)
 // e permite restaurá-los colando esse texto de volta. Sem dependências novas
 // (ver nota completa em index.js, junto a handleExportBackup/handleImportBackup).
@@ -163,8 +185,8 @@ function BackupSection({ styles, onExportBackup, onImportBackup }) {
       <View style={styles.divider} />
       <Text style={styles.sectionSubTitle}>CÓPIA DE SEGURANÇA</Text>
       <Text style={styles.tileSubDark}>
-        Exporta todos os teus dados (perfil, histórico, balança, objetivos, medidas) como texto —
-        guarda-o nas Notas, envia por email, etc. Para restaurar, cola esse texto aqui e importa.
+        Exporta todos os teus dados (perfil, histórico, tema, definições) como texto — guarda-o nas
+        Notas, envia por email, etc. Para restaurar, cola esse texto aqui e importa.
       </Text>
 
       <TouchableOpacity style={styles.itemBtn} onPress={onExportBackup}>
@@ -206,6 +228,8 @@ export default function SettingsMenu({
   onImportBackup,
   fogOpacity,
   onChangeFogOpacity,
+  healthSyncEnabled,
+  onToggleHealthSync,
 }) {
   return (
     <View style={styles.accordionBodyGrid}>
@@ -293,6 +317,8 @@ export default function SettingsMenu({
       </View>
 
       <DebugReportSection styles={styles} />
+
+      <HealthSyncSection styles={styles} healthSyncEnabled={healthSyncEnabled} onToggleHealthSync={onToggleHealthSync} />
 
       <BackupSection styles={styles} onExportBackup={onExportBackup} onImportBackup={onImportBackup} />
 

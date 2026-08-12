@@ -29,10 +29,13 @@
         "ACCESS_FINE_LOCATION",
         "VIBRATE",
         "WAKE_LOCK",
-        "POST_NOTIFICATIONS",
         "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
         "android.permission.MODIFY_AUDIO_SETTINGS",
-        "android.permission.health.READ_ACTIVE_CALORIES_BURNED"
+        "android.permission.health.WRITE_EXERCISE",
+        "android.permission.health.WRITE_ACTIVE_CALORIES_BURNED",
+        "android.permission.health.WRITE_TOTAL_CALORIES_BURNED",
+        "android.permission.health.WRITE_DISTANCE",
+        "android.permission.health.WRITE_VO2_MAX"
       ]
     },
     "plugins": [
@@ -50,18 +53,9 @@
         }
       ],
       [
-        "react-native-ble-plx",
-        {
-          "isBackgroundEnabled": false,
-          "modes": [
-            "central"
-          ]
-        }
-      ],
-      [
         "react-native-health-connect",
         {
-          "rationale": "A app necessita de ler os seus treinos e calorias para evitar contagem dupla com a app de corrida."
+          "rationale": "A app escreve os teus treinos no Health Connect para poderem aparecer na tua app de Saúde & Metabolismo."
         }
       ],
       [
