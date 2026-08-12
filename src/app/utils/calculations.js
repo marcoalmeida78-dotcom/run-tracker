@@ -82,6 +82,24 @@ export const getBestTimeForTitle = (history = [], title) => {
   return Math.min(...times);
 };
 
+// --- MAIOR DISTÂNCIA REGISTADA NO HISTÓRICO PARA UM DADO TÍTULO ---
+// Só faz sentido para as sessões do plano 0 aos 5K: como cada sessão dura
+// sempre o mesmo tempo fixo (não é uma corrida "até à meta"), o "melhor
+// tempo" acabava por ser sempre igual — o que varia de facto entre
+// repetições da mesma sessão é a distância percorrida nesse tempo. Devolve
+// a maior distância (em km) já registada para esse título, ou null se ainda
+// não houver nenhum registo.
+export const getBestDistanceForTitle = (history = [], title) => {
+  if (!title) return null;
+  const matching = (history || []).filter((item) => item.title === title);
+  if (matching.length === 0) return null;
+  const distances = matching
+    .map((item) => parseFloat(item.distanceKm))
+    .filter((km) => !Number.isNaN(km) && km > 0);
+  if (distances.length === 0) return null;
+  return Math.max(...distances);
+};
+
 // --- GERAÇÃO DA TIMELINE DE UMA SESSÃO DO PROGRAMA 0 AOS 5K ---
 // O aquecimento e o arrefecimento fazem sempre parte da timeline gerada; saltá-los
 // passou a ser uma ação em tempo real dentro da sessão (ver skipCurrentPhase em index.js),

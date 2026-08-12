@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { getLeafletMapHtml } from '../constants/mapHtml';
+import { LIME_GREEN } from '../constants/mapColors';
 import { calculateCalories, formatHMS } from '../utils/calculations';
 
 export default function ActiveExerciseScreen({
@@ -31,11 +32,12 @@ export default function ActiveExerciseScreen({
   bestTimeSec,
   bestCooperClassification,
 }) {
-  // Cor da rota do mapa a seguir o tema ativo, em vez de ficar sempre fixa
-  // (ver ponto 16.7 da documentação técnica). Memoizado porque este ecrã
-  // re-renderiza a cada segundo/atualização de GPS durante o exercício, e o
-  // HTML só precisa de mudar quando o tema muda.
-  const mapHtml = useMemo(() => getLeafletMapHtml(colors?.COLOR_LIME_ENERGY), [colors]);
+  // O traço/bola do mapa é sempre verde-lima, fixo — não segue o esquema de
+  // cores da app (pedido explícito, para se destacar sempre sobre o mapa).
+  // Continua memoizado porque este ecrã re-renderiza a cada segundo/
+  // atualização de GPS durante o exercício, e o HTML do WebView não precisa
+  // de ser recriado a cada render.
+  const mapHtml = useMemo(() => getLeafletMapHtml(LIME_GREEN), []);
 
   return (
     <ScrollView contentContainerStyle={styles.activeExerciseScroll}>

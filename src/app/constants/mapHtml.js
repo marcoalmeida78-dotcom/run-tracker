@@ -1,8 +1,8 @@
 // --- HTML DO MAPA (Leaflet + tiles OpenStreetMap Standard) ---
-// Função (não uma string fixa) para a cor da rota poder seguir o tema ativo
-// da app, em vez de ficar sempre fixa no verde do tema "Sálvia & Menta".
+// A cor do traço/bola é sempre verde-lima (ver constants/mapColors.js),
+// independentemente do esquema de cores da app.
 export const getLeafletMapHtml = (routeColor) => {
-  const color = routeColor || '#2D4A3E';
+  const color = routeColor || '#9ACD32';
   return `
 <!DOCTYPE html>
 <html>

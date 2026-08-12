@@ -52,8 +52,7 @@ import ActiveExerciseScreen from './components/ActiveExerciseScreen';
 const APP_BACKGROUND_IMAGE = require('../../assets/images/fundo.png');
 
 export default function App() {
-  const [currentTheme, setCurrentTheme] = useState('default');
-  const colors = THEMES[currentTheme] || THEMES.default;
+  const colors = THEMES.default;
 
   const [activeMenu, setActiveMenu] = useState(null);
   const [activeLevelAccordion, setActiveLevelAccordion] = useState(null);
@@ -299,9 +298,6 @@ export default function App() {
 
   const loadAppData = async () => {
     try {
-      const savedTheme = await AsyncStorage.getItem('@user_theme');
-      if (savedTheme && THEMES[savedTheme]) setCurrentTheme(savedTheme);
-
       const savedFogOpacity = await AsyncStorage.getItem('@fog_opacity');
       if (savedFogOpacity !== null) {
         const parsedOpacity = parseFloat(savedFogOpacity);
@@ -346,11 +342,6 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
-  };
-
-  const changeTheme = async (themeKey) => {
-    setCurrentTheme(themeKey);
-    await AsyncStorage.setItem('@user_theme', themeKey);
   };
 
   const changeFogOpacity = async (value) => {
@@ -1239,7 +1230,6 @@ export default function App() {
   // texto JSON, e a importação é feita colando esse texto de volta numa
   // caixa de texto (ver SettingsMenu.js).
   const BACKUP_KEYS = [
-    '@user_theme',
     '@fog_opacity',
     '@user_profile',
     '@user_history',
@@ -1277,7 +1267,7 @@ export default function App() {
 
     Alert.alert(
       'Importar Dados',
-      'Isto vai SUBSTITUIR todos os dados atuais (perfil, histórico, tema, definições) pelos dados da cópia de segurança. Queres continuar?',
+      'Isto vai SUBSTITUIR todos os dados atuais (perfil, histórico, definições) pelos dados da cópia de segurança. Queres continuar?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -1294,7 +1284,6 @@ export default function App() {
 
               // Atualiza já o estado que o index.js controla diretamente.
               const dataMap = Object.fromEntries(entries);
-              if (dataMap['@user_theme'] && THEMES[dataMap['@user_theme']]) setCurrentTheme(dataMap['@user_theme']);
               if (dataMap['@fog_opacity']) {
                 const parsedOpacity = parseFloat(dataMap['@fog_opacity']);
                 if (!isNaN(parsedOpacity)) setFogOpacity(Math.max(0, Math.min(1, parsedOpacity)));
@@ -1426,8 +1415,6 @@ export default function App() {
           onToggleLevelAccordion={toggleLevelAccordion}
           completedSessions={completedSessions}
           onStartExercise={startExerciseSession}
-          currentTheme={currentTheme}
-          onChangeTheme={changeTheme}
           profile={profile}
           onSaveProfile={saveProfileData}
           onResetAllData={handleResetAllData}

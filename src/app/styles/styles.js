@@ -1,4 +1,5 @@
 import { StyleSheet } from 'react-native';
+import { LIME_GREEN } from '../constants/mapColors';
 
 export const getStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
@@ -18,7 +19,9 @@ export const getStyles = (colors) => StyleSheet.create({
   statusDotTouchable: { padding: 6 },
   statusDotDark: { width: 12, height: 12, borderRadius: 6 },
   recommendationTextLight: { color: '#E2E8F0', fontSize: 16, fontWeight: '600', marginBottom: 14 },
-  actionBtnLight: { backgroundColor: colors.COLOR_LIME_ENERGY, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  // Botão "Iniciar Corrida" da sessão recomendada: verde-lima fixo (pedido
+  // explícito), não segue o esquema de cores como o resto dos botões "Light".
+  actionBtnLight: { backgroundColor: LIME_GREEN, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
   actionBtnTextDark: { color: colors.COLOR_ACCENT_TEXT, fontWeight: '800', fontSize: 13, letterSpacing: 1 },
   bentoRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
   bentoTileSage: { backgroundColor: colors.COLOR_CARD_BG, borderRadius: 20, padding: 16, width: '48%', borderWidth: 1, borderColor: colors.COLOR_DIVIDER },

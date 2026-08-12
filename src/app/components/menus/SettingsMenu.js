@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, PanResponder, Share, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { THEMES } from '../../constants/themes';
 import { clearDebugLog, formatDebugLogAsText, getDebugLog } from '../../utils/debugLog';
 
 // Slider simples (sem dependências externas) para ajustar a opacidade do
@@ -185,7 +184,7 @@ function BackupSection({ styles, onExportBackup, onImportBackup }) {
       <View style={styles.divider} />
       <Text style={styles.sectionSubTitle}>CÓPIA DE SEGURANÇA</Text>
       <Text style={styles.tileSubDark}>
-        Exporta todos os teus dados (perfil, histórico, tema, definições) como texto — guarda-o nas
+        Exporta todos os teus dados (perfil, histórico, definições) como texto — guarda-o nas
         Notas, envia por email, etc. Para restaurar, cola esse texto aqui e importa.
       </Text>
 
@@ -219,8 +218,6 @@ function BackupSection({ styles, onExportBackup, onImportBackup }) {
 export default function SettingsMenu({
   styles,
   onClose,
-  currentTheme,
-  onChangeTheme,
   profile,
   onSaveProfile,
   onResetAllData,
@@ -240,26 +237,6 @@ export default function SettingsMenu({
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.sectionSubTitle}>ESQUEMA DE CORES</Text>
-      <View style={styles.themeSelectorContainer}>
-        {Object.keys(THEMES).map((themeKey) => {
-          const isSelected = currentTheme === themeKey;
-          const themeItem = THEMES[themeKey];
-          return (
-            <TouchableOpacity
-              key={themeKey}
-              style={[styles.themeBtn, isSelected && styles.themeBtnActive]}
-              onPress={() => onChangeTheme(themeKey)}
-            >
-              <Text style={[styles.themeBtnText, isSelected && styles.themeBtnTextActive]}>
-                {themeItem.name} {isSelected ? '✓' : ''}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      <View style={styles.divider} />
       <Text style={styles.sectionSubTitle}>OPACIDADE DO FUNDO (NEVOEIRO)</Text>
       <View style={styles.sliderLabelRow}>
         <Text style={styles.inputLabel}>Imagem visível</Text>

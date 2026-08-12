@@ -23,8 +23,6 @@ export default function MainScreen({
 
   onStartExercise,
 
-  currentTheme,
-  onChangeTheme,
   profile,
   onSaveProfile,
   onResetAllData,
@@ -155,8 +153,6 @@ export default function MainScreen({
         <SettingsMenu
           styles={styles}
           onClose={() => onToggleAccordion('def')}
-          currentTheme={currentTheme}
-          onChangeTheme={onChangeTheme}
           profile={profile}
           onSaveProfile={onSaveProfile}
           onResetAllData={onResetAllData}
@@ -193,7 +189,11 @@ export default function MainScreen({
         />
       )}
 
-      {/* --- BARRA DE ENERGIA DO PLANO --- */}
+      {/* --- BARRA DE ENERGIA DO PLANO ---
+          O preenchimento segue a sessão marcada como "atual" (currentSessionIndex),
+          não o número de sessões realmente concluídas — assim, quem começa mais à
+          frente no plano (por já ter uma boa forma física) vê logo a barra a refletir
+          esse progresso, em vez de ficar sempre incompleta até ao fim. */}
       <TouchableOpacity style={styles.batterySectionTouchable} onPress={onShowBatteryInfo}>
         <View style={styles.batteryTitleRow}>
           <Text style={styles.tileNumberPrimary}>07</Text>
@@ -207,7 +207,7 @@ export default function MainScreen({
                 style={[
                   styles.batteryFill, 
                   { 
-                    width: `${(completedSessions.length / 75) * 100}%`,
+                    width: `${(currentSessionIndex / 75) * 100}%`,
                     backgroundColor: '#a3e635', 
                     opacity: 0.8 
                   }
@@ -217,7 +217,7 @@ export default function MainScreen({
           </View>
           <View style={styles.batteryTerminal} />
         </View>
-        <Text style={styles.batteryCountText}>{completedSessions.length} / 75 sessões concluídas</Text>
+        <Text style={styles.batteryCountText}>{currentSessionIndex} / 75 sessões concluídas</Text>
       </TouchableOpacity>
     </ScrollView>
   );

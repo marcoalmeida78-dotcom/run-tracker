@@ -1,76 +1,21 @@
-// --- TEMAS / PALETAS DE CORES DA APLICAÇÃO ---
+// --- ESQUEMA DE CORES DA APLICAÇÃO ---
 //
-// Desde que a aplicação passou a usar uma imagem de fundo (fundo.png),
-// as cores de superfície (COLOR_BG_MAIN, COLOR_CARD_BG, COLOR_PRIMARY_BG,
-// COLOR_DIVIDER) usam rgba() com transparência, para que a imagem se veja
-// através dos menus/cartões ("efeito vidro fosco").
-//
-// Todos os temas usam agora o mesmo nível de transparência nos cartões
-// (mesmo alpha em COLOR_CARD_BG / COLOR_BG_MAIN / COLOR_PRIMARY_BG /
-// COLOR_DIVIDER), à semelhança do tema "Vidro Branco". Os únicos valores
-// que variam de tema para tema são a matiz (o RGB) e o próprio texto.
+// A app deixou de ter vários esquemas de cores à escolha — fica só o
+// "Vidro Branco" (efeito vidro fosco sobre a imagem de fundo, com o
+// slider de opacidade em Definições a controlar quanto se vê da foto).
 //
 // COLOR_PRIMARY e COLOR_SECONDARY mantêm-se sólidos (sem transparência)
 // porque são usados como cor de TEXTO — texto transparente sobre uma foto
 // deixaria de ser legível.
 //
-// COLOR_PRIMARY_BG é o equivalente translúcido de COLOR_PRIMARY, usado
-// apenas quando COLOR_PRIMARY servia de FUNDO a um cartão (nunca como texto).
-//
-// COLOR_ACCENT_TEXT é a cor de texto usada em cima de botões com fundo
-// COLOR_LIME_ENERGY (ex: "INICIAR CORRIDA"). Nos temas normais é igual a
-// COLOR_PRIMARY (como já era); no tema "Vidro Branco" o botão de destaque
-// é branco opaco, por isso o texto tem de ser escuro para se ler.
+// COLOR_LIME_ENERGY é a cor de destaque geral (botões concluídos, barra de
+// energia, barras de progresso, etc.) — no Vidro Branco é branco opaco.
+// Não confundir com o verde-lima fixo usado no traço do mapa e no botão
+// "Iniciar Corrida" (ver constants/mapColors.js) — esses são sempre
+// verde-lima, independentemente deste esquema de cores.
 export const THEMES = {
   default: {
     id: 'default',
-    name: 'Sálvia & Menta',
-    COLOR_BG_MAIN: 'rgba(232, 240, 236, 0.28)',
-    COLOR_CARD_BG: 'rgba(244, 248, 245, 0.46)',
-    COLOR_PRIMARY: '#FFFFFF',
-    COLOR_PRIMARY_BG: 'rgba(45, 74, 62, 0.55)',
-    COLOR_SECONDARY: 'rgba(255, 255, 255, 0.75)',
-    COLOR_DIVIDER: 'rgba(194, 213, 201, 0.45)',
-    COLOR_LIME_ENERGY: '#73B08C',
-    COLOR_ACCENT_TEXT: '#2D4A3E',
-    COLOR_RED_ACCENT: '#D97770',
-  },
-  wellness: {
-    id: 'wellness',
-    name: 'Azul Sereno',
-    COLOR_BG_MAIN: 'rgba(235, 242, 247, 0.28)',
-    COLOR_CARD_BG: 'rgba(245, 249, 252, 0.45)',
-    COLOR_PRIMARY: '#FFFFFF',
-    COLOR_PRIMARY_BG: 'rgba(43, 58, 74, 0.55)',
-    COLOR_SECONDARY: 'rgba(255, 255, 255, 0.75)',
-    COLOR_DIVIDER: 'rgba(200, 215, 227, 0.45)',
-    // Ajustado para melhorar a legibilidade dos textos azuis deste tema (ex:
-    // números "01/02/03", "melhor tempo", ligações no menu Saúde): o tom
-    // anterior (#6BA4C8) era demasiado próximo, em matiz e claridade, do fundo
-    // "vidro" claro e azulado usado pelos cartões (COLOR_BG_MAIN/COLOR_CARD_BG),
-    // o que fazia o texto misturar-se com o fundo em certas zonas da imagem.
-    // Este azul é mais saturado/vivo, destacando-se tanto sobre os cartões
-    // escuros (COLOR_PRIMARY_BG) como sobre os cartões claros "vidro fosco".
-    // Só este tema foi alterado — os restantes esquemas de cores mantêm-se.
-    COLOR_LIME_ENERGY: '#2E86AB',
-    COLOR_ACCENT_TEXT: '#2B3A4A',
-    COLOR_RED_ACCENT: '#E07A5F',
-  },
-  neon: {
-    id: 'neon',
-    name: 'Areia & Mostarda',
-    COLOR_BG_MAIN: 'rgba(245, 240, 235, 0.28)',
-    COLOR_CARD_BG: 'rgba(250, 246, 240, 0.55)',
-    COLOR_PRIMARY: '#3D3228',
-    COLOR_PRIMARY_BG: 'rgba(61, 50, 40, 0.55)',
-    COLOR_SECONDARY: '#5E4F3F',
-    COLOR_DIVIDER: 'rgba(221, 211, 199, 0.45)',
-    COLOR_LIME_ENERGY: '#D99B26',
-    COLOR_ACCENT_TEXT: '#3D3228',
-    COLOR_RED_ACCENT: '#C85A54',
-  },
-  glass: {
-    id: 'glass',
     name: 'Vidro Branco',
     COLOR_BG_MAIN: 'rgba(255, 255, 255, 0.12)',
     COLOR_CARD_BG: 'rgba(255, 255, 255, 0.22)',

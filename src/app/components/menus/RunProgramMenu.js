@@ -1,6 +1,6 @@
 import { Text, TouchableOpacity, View } from 'react-native';
 import { RUN_PROGRAM_LEVELS } from '../../constants/runProgram';
-import { formatHMS, getBestTimeForTitle } from '../../utils/calculations';
+import { getBestDistanceForTitle } from '../../utils/calculations';
 
 export default function RunProgramMenu({
   styles,
@@ -49,10 +49,12 @@ export default function RunProgramMenu({
                     const globalIdx = index * 3 + sIdx;
                     const isRecommendedSess = globalIdx === currentSessionIndex;
                     const isDoneSess = completedSessions.includes(globalIdx);
-                    // Melhor tempo já registado no histórico para esta sessão em concreto
-                    // (mesmo título usado ao guardar o treino — ver launchProgramSession em index.js).
+                    // Maior distância já percorrida nesta sessão em concreto (mesmo título
+                    // usado ao guardar o treino — ver launchProgramSession em index.js).
+                    // Não é "melhor tempo" porque cada sessão dura sempre o mesmo tempo
+                    // fixo — o que varia é a distância percorrida nesse tempo.
                     const sessionTitle = `Corrida: ${lvl.title} - ${sess}`;
-                    const bestSessionSec = getBestTimeForTitle(history, sessionTitle);
+                    const bestSessionDistanceKm = getBestDistanceForTitle(history, sessionTitle);
                     return (
                       <View key={sIdx} style={styles.sessBtnColumn}>
                         <TouchableOpacity
@@ -63,8 +65,8 @@ export default function RunProgramMenu({
                             {sess} {isRecommendedSess ? '★' : isDoneSess ? '✓' : ''}
                           </Text>
                         </TouchableOpacity>
-                        {bestSessionSec !== null && (
-                          <Text style={styles.sessionBestTimeText}>🏆 {formatHMS(bestSessionSec)}</Text>
+                        {bestSessionDistanceKm !== null && (
+                          <Text style={styles.sessionBestTimeText}>🏆 {bestSessionDistanceKm.toFixed(2)} km</Text>
                         )}
                       </View>
                     );

@@ -68,7 +68,7 @@ export default function AppModals({
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>🔋 Barra de Energia do Plano</Text>
-            <Text style={styles.modalText}>Reflete a evolução global das 75 sessões (25 níveis).</Text>
+            <Text style={styles.modalText}>Mostra a tua posição no plano de 75 sessões (25 níveis), com base na sessão que tens marcada como atual — não no número de sessões que já realizaste. Se começares mais à frente (por exemplo, na sessão 30, por já teres alguma forma física), a barra reflete logo essa posição.</Text>
             <TouchableOpacity style={styles.modalBtn} onPress={onCloseBatteryInfoModal}>
               <Text style={styles.modalBtnText}>Compreendido</Text>
             </TouchableOpacity>
