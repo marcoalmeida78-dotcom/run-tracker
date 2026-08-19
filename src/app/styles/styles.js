@@ -6,13 +6,13 @@ export const getStyles = (colors) => StyleSheet.create({
   // "Nevoeiro" sobre a imagem de fundo: aumenta o valor de opacity (0 a 1) para esconder mais a imagem,
   // ou diminui para deixá-la mais visível. Podes também trocar a cor (ex: '#ffffff' para um nevoeiro claro).
   backgroundFogOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000000', opacity: 0.45 },
-  scrollContent: { padding: 16, paddingTop: 28, paddingBottom: 40 },
+  scrollContent: { padding: 16, paddingTop: 48, paddingBottom: 24 },
   activeExerciseScroll: { padding: 20, paddingTop: 36, paddingBottom: 40 },
   appHeaderTitle: { fontSize: 26, fontWeight: '900', color: colors.COLOR_PRIMARY, textAlign: 'center', marginBottom: 20, marginTop: 16, letterSpacing: 2, textShadowColor: 'rgba(0,0,0,0.25)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
   // Frase motivacional que ocupa o lugar onde estava o título (ver MotivationalQuote.js).
   // fontSize é o tamanho MÁXIMO (frases de uma linha ficam com este); adjustsFontSizeToFit
   // no componente encolhe automaticamente as frases mais compridas até caberem em 2 linhas.
-  motivationalQuoteText: { fontSize: 30, fontWeight: '900', color: '#ffffff', textAlign: 'center', marginBottom: 20, marginTop: 16, letterSpacing: -0.5, lineHeight: 34, textTransform: 'uppercase' },
+  motivationalQuoteText: { fontSize: 30, fontWeight: '900', color: '#ffffff', textAlign: 'center', marginBottom: 24, marginTop: 8, letterSpacing: -0.5, lineHeight: 34, textTransform: 'uppercase' },
   mapContainer: { height: 220, borderRadius: 16, overflow: 'hidden', marginBottom: 14, borderWidth: 1, borderColor: colors.COLOR_DIVIDER, backgroundColor: '#061414' },
   map: { flex: 1, backgroundColor: 'transparent' },
   bentoHeroCardPrimary: { backgroundColor: colors.COLOR_PRIMARY_BG, borderRadius: 20, padding: 18, marginBottom: 12, borderWidth: 1, borderColor: colors.COLOR_DIVIDER },

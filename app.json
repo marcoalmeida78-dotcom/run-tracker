@@ -6,10 +6,6 @@
     "name": "Zero aos 5K",
     "slug": "zero-aos-5k",
     "version": "1.0.0",
-    "scheme": "run-tracker",
-    "web": {
-      "bundler": "metro"
-    },
     "icon": "assets/icon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
@@ -25,6 +21,10 @@
     },
     "android": {
       "package": "com.marcoalmeida.zeroaos5k",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundColor": "#121418"
+      },
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
@@ -70,8 +70,7 @@
           }
         }
       ],
-      "./plugins/withHealthConnectFix.js",
-      "expo-asset"
+      "./plugins/withHealthConnectFix.js"
     ],
     "extra": {
       "eas": {
