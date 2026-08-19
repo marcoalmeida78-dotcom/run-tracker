@@ -32,7 +32,15 @@ export default function HistoryMenu({ styles, onClose, history, onDeleteHistoryI
               </Text>
             )}
 
+            {item.metersDone != null && (
+              <Text style={styles.historySub}>
+                Percorridos: {item.metersDone} / {item.metersTarget ?? 1000} m
+                {item.metersMissing > 0 ? ` (faltaram ${item.metersMissing} m)` : ''}
+              </Text>
+            )}
+
             <Text style={styles.historySub}>Distância: {item.distanceKm} km | Tempo: {formatHMS(item.timeSec)}</Text>
+            <Text style={styles.historySub}>Calorias: {item.calories ?? '—'} kcal</Text>
           </View>
         ))
       )}

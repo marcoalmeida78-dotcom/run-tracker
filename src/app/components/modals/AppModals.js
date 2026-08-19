@@ -31,6 +31,10 @@ export default function AppModals({
   onSkipHeartRate,
   testResultData,
   onCloseTestResult,
+
+  showSuddenDeathResultModal,
+  suddenDeathResultData,
+  onCloseSuddenDeathResult,
 }) {
   return (
     <>
@@ -162,6 +166,46 @@ export default function AppModals({
                   </Text>
                 )}
                 <TouchableOpacity style={styles.modalBtn} onPress={onCloseTestResult}>
+                  <Text style={styles.modalBtnText}>OK</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* RESULTADO DETALHADO DO DESAFIO MORTE SÚBITA — sucesso ou falha, com
+          metros exatos percorridos e em falta face ao total fixo de 1000m
+          (ver getSuddenDeathProgress em utils/calculations.js). */}
+      <Modal visible={showSuddenDeathResultModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            {suddenDeathResultData && (
+              <>
+                <Text style={styles.modalTitle}>
+                  {suddenDeathResultData.success ? '🏁 Desafio Concluído!' : '❌ Fim do Desafio'}
+                </Text>
+                {!suddenDeathResultData.success && suddenDeathResultData.failedAtBlock != null && (
+                  <Text style={styles.modalText}>
+                    Não conseguiste percorrer os 100 metros do bloco {suddenDeathResultData.failedAtBlock} dentro do tempo limite.
+                  </Text>
+                )}
+                <View style={styles.recordHighlightBox}>
+                  <Text style={styles.recordTitle}>METROS PERCORRIDOS</Text>
+                  <Text style={[styles.testResultHighlight, { fontSize: 20 }]}>
+                    {suddenDeathResultData.metersDone} / {suddenDeathResultData.metersTarget} m
+                  </Text>
+                </View>
+                {suddenDeathResultData.metersMissing > 0 && (
+                  <Text style={styles.modalText}>
+                    Faltaram {suddenDeathResultData.metersMissing} metros para completar o desafio todo.
+                  </Text>
+                )}
+                <Text style={styles.modalText}>
+                  Tempo total: {Math.floor(suddenDeathResultData.timeSec / 60)}m {suddenDeathResultData.timeSec % 60}s{'\n'}
+                  Calorias: {suddenDeathResultData.calories} kcal
+                </Text>
+                <TouchableOpacity style={styles.modalBtn} onPress={onCloseSuddenDeathResult}>
                   <Text style={styles.modalBtnText}>OK</Text>
                 </TouchableOpacity>
               </>

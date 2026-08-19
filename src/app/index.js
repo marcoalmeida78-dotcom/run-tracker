@@ -33,9 +33,11 @@ import {
   calculateHaversine,
   calculate15MilesVo2Max,
   calculate1MileRunVo2Max,
+  calculatePace,
   calculateRockportVo2Max,
   generateTimeline,
   getBestTimeForTitle,
+  getSuddenDeathProgress,
 } from './utils/calculations';
 import {
   calculateCooperVo2Max,
@@ -116,6 +118,10 @@ export default function App() {
   const [heartRateInput, setHeartRateInput] = useState('');
   const [testResultData, setTestResultData] = useState(null);
   const pendingFinishRef = useRef(null); // { type, title, finalSec, finalDist, finalSpeed, config }
+
+  // --- NOVO: Modal de resultado detalhado do Desafio Morte Súbita (sucesso ou falha) ---
+  const [showSuddenDeathResultModal, setShowSuddenDeathResultModal] = useState(false);
+  const [suddenDeathResultData, setSuddenDeathResultData] = useState(null);
 
   // --- NOVO: Estado de perda de GPS / Rede ---
   const [noSignalAlert, setNoSignalAlert] = useState(false);
@@ -243,7 +249,7 @@ export default function App() {
       endTime: new Date().toISOString(),
       timeSec: capturedSec,
       distanceKm: capturedDist.toFixed(2),
-      pace: capturedDist > 0 ? (capturedSec / 60 / capturedDist).toFixed(2) : '0.00',
+      pace: calculatePace(capturedDist, capturedSec) ?? '0.00',
       calories: calculateCalories(capturedDist, capturedSec, currentProfile.weight),
       speed: capturedSpeed,
       vo2Max: null,
@@ -969,10 +975,11 @@ export default function App() {
     stopAndCleanupExercise();
     Vibration.vibrate([400, 200, 400]);
     playAudio(`Tempo esgotado no bloco ${configBlock.block}. Desafio Morte Súbita não concluído.`);
-    Alert.alert(
-      'Fim do Desafio ❌',
-      `Não conseguiste percorrer os 100 metros do bloco ${configBlock.block} dentro do tempo limite de ${configBlock.timeSec} segundos.`
-    );
+
+    // Metros exatos feitos/em falta face ao total fixo do desafio (10 blocos
+    // x 100m = 1000m) — ver getSuddenDeathProgress em utils/calculations.js.
+    const { metersDone, metersMissing, metersTarget } = getSuddenDeathProgress(currentDist, SUDDEN_DEATH_BLOCKS.length);
+    const recordCalories = calculateCalories(currentDist, currentSec, profile.weight);
 
     const newRecord = {
       id: Date.now().toString(),
@@ -982,12 +989,15 @@ export default function App() {
       endTime: new Date().toISOString(),
       timeSec: currentSec,
       distanceKm: currentDist.toFixed(2),
-      pace: currentDist > 0 ? (currentSec / 60 / currentDist).toFixed(2) : '0.00',
-      calories: calculateCalories(currentDist, currentSec, profile.weight),
+      pace: calculatePace(currentDist, currentSec) ?? '0.00',
+      calories: recordCalories,
       speed: currentSpeed,
       vo2Max: null,
       failed: true,
       failedAtBlock: configBlock.block,
+      metersDone,
+      metersMissing,
+      metersTarget,
     };
 
     const updatedHistory = [newRecord, ...history];
@@ -995,6 +1005,17 @@ export default function App() {
     updateRecordsFromHistory(updatedHistory);
     await AsyncStorage.setItem('@user_history', JSON.stringify(updatedHistory));
     syncExerciseRecordToHealthConnect(newRecord).catch(() => {});
+
+    setSuddenDeathResultData({
+      success: false,
+      failedAtBlock: configBlock.block,
+      metersDone,
+      metersMissing,
+      metersTarget,
+      timeSec: currentSec,
+      calories: recordCalories,
+    });
+    setShowSuddenDeathResultModal(true);
   };
 
   const autoFinishExercise = async (type, title, finalSec, finalDist, finalSpeed, config) => {
@@ -1043,6 +1064,57 @@ export default function App() {
       return;
     }
 
+    // --- Desafio Morte Súbita: mostra sempre o modal detalhado (metros feitos/
+    // em falta face ao total de 1000m) em vez de só depender do áudio — ver
+    // getSuddenDeathProgress em utils/calculations.js. Cobre tanto a conclusão
+    // dos 10 blocos como um términus manual a meio do desafio.
+    if (type === 'challenge_morte_subita') {
+      playAudio('Parabéns! Completou o treino com sucesso!');
+      if (isNewPersonalBest) {
+        Vibration.vibrate([200, 100, 200, 100, 200]);
+        playAudio('Novo recorde pessoal! Bateste o teu melhor tempo anterior para este exercício. Parabéns!');
+      }
+
+      const { metersDone, metersMissing, metersTarget } = getSuddenDeathProgress(finalDist, SUDDEN_DEATH_BLOCKS.length);
+      const recordCalories = calculateCalories(finalDist, finalSec, profile.weight);
+
+      const suddenDeathRecord = {
+        id: Date.now().toString(),
+        title,
+        date: new Date().toLocaleDateString('pt-PT'),
+        startTime: capturedStartTime ? new Date(capturedStartTime).toISOString() : null,
+        endTime: new Date().toISOString(),
+        timeSec: finalSec,
+        distanceKm: finalDist.toFixed(2),
+        pace: calculatePace(finalDist, finalSec) ?? '0.00',
+        calories: recordCalories,
+        speed: finalSpeed,
+        vo2Max: null,
+        failed: metersMissing > 0,
+        metersDone,
+        metersMissing,
+        metersTarget,
+      };
+
+      const updatedHistory = [suddenDeathRecord, ...history];
+      setHistory(updatedHistory);
+      updateRecordsFromHistory(updatedHistory);
+      await AsyncStorage.setItem('@user_history', JSON.stringify(updatedHistory));
+      syncExerciseRecordToHealthConnect(suddenDeathRecord).catch(() => {});
+
+      setSuddenDeathResultData({
+        success: metersMissing === 0,
+        failedAtBlock: null,
+        metersDone,
+        metersMissing,
+        metersTarget,
+        timeSec: finalSec,
+        calories: recordCalories,
+      });
+      setShowSuddenDeathResultModal(true);
+      return;
+    }
+
     let vo2Val = null;
     let finishMessage = 'Parabéns! Completou o treino com sucesso!';
     playAudio(finishMessage);
@@ -1063,7 +1135,7 @@ export default function App() {
       endTime: new Date().toISOString(),
       timeSec: finalSec,
       distanceKm: finalDist.toFixed(2),
-      pace: finalDist > 0 ? (finalSec / 60 / finalDist).toFixed(2) : '0.00',
+      pace: calculatePace(finalDist, finalSec) ?? '0.00',
       calories: calculateCalories(finalDist, finalSec, profile.weight),
       speed: finalSpeed,
       vo2Max: vo2Val,
@@ -1131,7 +1203,7 @@ export default function App() {
       endTime: new Date().toISOString(),
       timeSec: finalSec,
       distanceKm: finalDist.toFixed(2),
-      pace: finalDist > 0 ? (finalSec / 60 / finalDist).toFixed(2) : '0.00',
+      pace: calculatePace(finalDist, finalSec) ?? '0.00',
       calories: calculateCalories(finalDist, finalSec, profile.weight),
       speed: finalSpeed,
       vo2Max: vo2Val,
@@ -1182,6 +1254,11 @@ export default function App() {
     setTestResultData(null);
     setHeartRateInput('');
     setPendingTestTitle('');
+  };
+
+  const handleCloseSuddenDeathResult = () => {
+    setShowSuddenDeathResultModal(false);
+    setSuddenDeathResultData(null);
   };
 
   const handleDeleteHistoryItem = (idToDelete) => {
@@ -1372,6 +1449,9 @@ export default function App() {
         onSkipHeartRate={handleSkipHeartRate}
         testResultData={testResultData}
         onCloseTestResult={handleCloseTestResult}
+        showSuddenDeathResultModal={showSuddenDeathResultModal}
+        suddenDeathResultData={suddenDeathResultData}
+        onCloseSuddenDeathResult={handleCloseSuddenDeathResult}
       />
 
       {isExercising ? (

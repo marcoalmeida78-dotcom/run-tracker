@@ -19,6 +19,35 @@ export const calculateHaversine = (lat1, lon1, lat2, lon2) => {
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 };
 
+// --- RITMO (MIN/KM) ---
+// Ritmo médio = tempo decorrido (em minutos) a dividir pela distância percorrida
+// (em km) — fórmula correta e igual à que já estava espalhada por vários
+// ecrãs (ActiveExerciseScreen e index.js), agora centralizada aqui para os
+// vários sítios nunca poderem divergir entre si.
+// Abaixo de 15 metros, dividir por uma distância quase nula produzia valores
+// gigantes e sem significado (ex: "950.00 min/km" nos primeiros segundos de
+// GPS instável) — isso é o que por vezes parecia "errado"; devolve null
+// nesse caso em vez de mostrar um número enganador.
+export const calculatePace = (distanceKm, timeSec) => {
+  const dist = parseFloat(distanceKm);
+  const time = parseFloat(timeSec);
+  if (!dist || dist < 0.015 || !time || time <= 0) return null;
+  return (time / 60 / dist).toFixed(2);
+};
+
+// --- DESAFIO MORTE SÚBITA: PROGRESSO EM METROS ---
+// O desafio tem sempre um total fixo (10 blocos x 100m = 1000m, ver
+// constants/runProgram.js). A partir da distância total percorrida (em km)
+// devolve exatamente quantos metros foram feitos e quantos faltam para
+// completar o desafio todo — usado tanto quando é concluído com sucesso
+// como quando falha a meio de um bloco.
+export const getSuddenDeathProgress = (distanceKm, totalBlocks = 10, metersPerBlock = 100) => {
+  const metersTarget = totalBlocks * metersPerBlock;
+  const metersDone = Math.min(metersTarget, Math.max(0, Math.round((parseFloat(distanceKm) || 0) * 1000)));
+  const metersMissing = Math.max(0, metersTarget - metersDone);
+  return { metersDone, metersMissing, metersTarget };
+};
+
 // --- CALORIAS ---
 // weightKg é opcional: passa o peso do perfil do utilizador; usa 70kg por omissão.
 export const calculateCalories = (distKm, timeSec, weightKg = 70) => {

@@ -8,10 +8,12 @@
 import {
   calculateHaversine,
   calculateCalories,
+  calculatePace,
   calculateRockportVo2Max,
   calculate15MilesVo2Max,
   calculate1MileRunVo2Max,
   getBestTimeForTitle,
+  getSuddenDeathProgress,
   generateTimeline,
   formatHMS,
 } from '../utils/calculations';
@@ -39,6 +41,46 @@ describe('calculateHaversine', () => {
     const d3 = calculateHaversine(0, 0, 0.1, 0);
     expect(d2).toBeGreaterThan(d1);
     expect(d3).toBeGreaterThan(d2);
+  });
+});
+
+describe('calculatePace', () => {
+  // ritmo (min/km) = (tempo_seg / 60) / distância_km
+  it('calcula o ritmo médio corretamente', () => {
+    // 5km em 25min (1500s) = 5 min/km
+    expect(calculatePace(5, 1500)).toBe('5.00');
+  });
+
+  it('devolve null com distância percorrida abaixo de 15 metros (evita valores instáveis)', () => {
+    expect(calculatePace(0.01, 30)).toBeNull();
+    expect(calculatePace(0, 30)).toBeNull();
+  });
+
+  it('devolve null com tempo zero ou negativo (sem divisão por zero)', () => {
+    expect(calculatePace(1, 0)).toBeNull();
+    expect(calculatePace(1, -5)).toBeNull();
+  });
+
+  it('é consistente para o mesmo par distância/tempo, independentemente de quantas vezes é chamada', () => {
+    expect(calculatePace(3.2, 1000)).toBe(calculatePace(3.2, 1000));
+  });
+});
+
+describe('getSuddenDeathProgress', () => {
+  it('com 0 km percorridos, devolve 0 feitos e 1000 em falta', () => {
+    expect(getSuddenDeathProgress(0)).toEqual({ metersDone: 0, metersMissing: 1000, metersTarget: 1000 });
+  });
+
+  it('com distância a meio (0.45km), devolve 450 feitos e 550 em falta', () => {
+    expect(getSuddenDeathProgress(0.45)).toEqual({ metersDone: 450, metersMissing: 550, metersTarget: 1000 });
+  });
+
+  it('com o desafio completo (1km), devolve 1000 feitos e 0 em falta', () => {
+    expect(getSuddenDeathProgress(1)).toEqual({ metersDone: 1000, metersMissing: 0, metersTarget: 1000 });
+  });
+
+  it('nunca ultrapassa o total (ex: GPS com alguma distância a mais), fica sempre a 0 em falta', () => {
+    expect(getSuddenDeathProgress(1.2)).toEqual({ metersDone: 1000, metersMissing: 0, metersTarget: 1000 });
   });
 });
 

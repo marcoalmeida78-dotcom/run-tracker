@@ -52,8 +52,9 @@ export default function MainScreen({
 
   return (
     <ScrollView contentContainerStyle={styles.scrollContent}>
-      {/* Ponto 7: Título com cor fixa de vidro branco */}
-      <Text style={[styles.appHeaderTitle, { color: titleColor }]}>ZERO AOS 5K</Text>
+      {/* Ponto 7: título removido a pedido do utilizador — mantém-se o espaçamento
+          (marginTop/marginBottom de appHeaderTitle) para não comprimir o layout. */}
+      <Text style={[styles.appHeaderTitle, { color: titleColor }]} />
 
       {/* --- CARTÃO DE SESSÃO RECOMENDADA --- */}
       <View style={styles.bentoHeroCardPrimary}>
