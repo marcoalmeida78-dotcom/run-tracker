@@ -3,10 +3,8 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
-    "@expo/config-plugins": "~9.0.0",
     "@react-native-async-storage/async-storage": "1.23.1",
     "expo": "~52.0.0",
-    "expo-asset": "~11.0.5",
     "expo-av": "~15.0.2",
     "expo-battery": "~9.0.2",
     "expo-build-properties": "~0.13.3",
@@ -57,9 +55,7 @@
   },
   "jest": {
     "preset": "jest-expo",
-    "testPathIgnorePatterns": [
-      "/node_modules/"
-    ]
+    "testPathIgnorePatterns": ["/node_modules/"]
   },
   "private": true
 }

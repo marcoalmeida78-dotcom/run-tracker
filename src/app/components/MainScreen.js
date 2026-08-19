@@ -2,6 +2,7 @@ import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { RUN_PROGRAM_LEVELS } from '../constants/runProgram';
 import ChallengesMenu from './menus/ChallengesMenu';
 import HistoryMenu from './menus/HistoryMenu';
+import MotivationalQuote from './MotivationalQuote';
 import RunProgramMenu from './menus/RunProgramMenu';
 import SettingsMenu from './menus/SettingsMenu';
 import WalksMenu from './menus/WalksMenu';
@@ -47,14 +48,12 @@ export default function MainScreen({
     return '#ef4444'; // Vermelho
   };
 
-  // Título sempre com cor branca fixa (independente do tema ativo).
-  const titleColor = '#ffffff';
-
   return (
     <ScrollView contentContainerStyle={styles.scrollContent}>
-      {/* Ponto 7: título removido a pedido do utilizador — mantém-se o espaçamento
-          (marginTop/marginBottom de appHeaderTitle) para não comprimir o layout. */}
-      <Text style={[styles.appHeaderTitle, { color: titleColor }]} />
+      {/* Ponto 7: título removido a pedido do utilizador — no lugar aparece agora
+          uma frase motivacional rotativa (ver MotivationalQuote.js), que muda a
+          cada abertura da app e percorre sequencialmente todas as frases. */}
+      <MotivationalQuote style={styles.motivationalQuoteText} />
 
       {/* --- CARTÃO DE SESSÃO RECOMENDADA --- */}
       <View style={styles.bentoHeroCardPrimary}>
