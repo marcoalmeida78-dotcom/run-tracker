@@ -48,13 +48,26 @@ export const getStyles = (colors) => StyleSheet.create({
   itemBtnText: { color: colors.COLOR_PRIMARY, fontWeight: '600', fontSize: 13 },
   itemBtnSubText: { color: colors.COLOR_SECONDARY, fontWeight: '600', fontSize: 11, marginTop: 4 },
   levelCard: { backgroundColor: colors.COLOR_BG_MAIN, borderRadius: 12, marginBottom: 8, overflow: 'hidden', borderWidth: 1, borderColor: colors.COLOR_DIVIDER },
+  // Nível com as 3 sessões concluídas: borda em destaque para se distinguir
+  // dos restantes só de relance, sem precisar de abrir o acordeão.
+  levelCardComplete: { borderColor: colors.COLOR_LIME_ENERGY, borderWidth: 1.5 },
   levelHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 },
   levelHeaderActive: { backgroundColor: colors.COLOR_DIVIDER },
-  levelTitleRow: { flexDirection: 'row', alignItems: 'center' },
+  levelTitleRow: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 },
   currentDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.COLOR_PRIMARY, marginRight: 6 },
   levelTitle: { fontWeight: '700', fontSize: 13, color: colors.COLOR_PRIMARY },
   levelTitleActiveText: { fontWeight: '900' },
   levelChevron: { fontSize: 11, color: colors.COLOR_SECONDARY, fontWeight: '700' },
+  // --- Indicador de progresso do nível (visível com o acordeão fechado) ---
+  // 3 pontos, um por sessão: preenchido = sessão concluída, apenas contornado
+  // = por fazer. Dá para perceber ao correr o olho pelos 25 níveis se um
+  // nível está todo por fazer (3 vazios), parcial (mistura) ou completo (3
+  // preenchidos), sem ter de abrir cada um.
+  levelProgressRow: { flexDirection: 'row', alignItems: 'center', marginLeft: 8 },
+  levelProgressDot: { width: 7, height: 7, borderRadius: 3.5, borderWidth: 1, borderColor: colors.COLOR_DIVIDER, marginLeft: 3 },
+  levelProgressDotDone: { backgroundColor: colors.COLOR_LIME_ENERGY, borderColor: colors.COLOR_LIME_ENERGY },
+  levelProgressLabel: { fontSize: 10, fontWeight: '700', color: colors.COLOR_SECONDARY, marginLeft: 6 },
+  levelProgressLabelDone: { color: colors.COLOR_LIME_ENERGY },
   levelDetailsContainer: { padding: 12, paddingTop: 0 },
   levelSummaryText: { fontSize: 11, color: colors.COLOR_SECONDARY, marginBottom: 8, fontStyle: 'italic' },
   sessionList: { flexDirection: 'row', justifyContent: 'space-between' },

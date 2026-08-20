@@ -1115,6 +1115,65 @@ export default function App() {
       return;
     }
 
+    // --- DESAFIO 5KM EM 30 MINUTOS: sucesso ou falha decididos aqui, pela
+    // distância realmente percorrida face ao objetivo (5000m) — não importa
+    // se chegou aqui por ter esgotado o tempo, por ter atingido a distância,
+    // ou por o utilizador ter terminado manualmente antes de tempo (nesse
+    // caso, se ainda não tinha os 5km percorridos, fica corretamente marcado
+    // como falhado, tal como acontece no Morte Súbita). Mesmo modal de
+    // resultado detalhado, reaproveitando getSuddenDeathProgress com um único
+    // "bloco" do tamanho do objetivo deste desafio, em vez dos 10 blocos de
+    // 100m do Morte Súbita.
+    if (type === 'challenge_5k30') {
+      const targetDistKm = config?.targetDistKm || 5.0;
+      const targetMeters = Math.round(targetDistKm * 1000);
+      const { metersDone, metersMissing, metersTarget } = getSuddenDeathProgress(finalDist, 1, targetMeters);
+      const success = metersMissing === 0;
+
+      playAudio(success ? 'Parabéns! Completou o treino com sucesso!' : 'Tempo esgotado. Desafio não concluído.');
+      if (success && isNewPersonalBest) {
+        Vibration.vibrate([200, 100, 200, 100, 200]);
+        playAudio('Novo recorde pessoal! Bateste o teu melhor tempo anterior para este exercício. Parabéns!');
+      }
+
+      const recordCalories = calculateCalories(finalDist, finalSec, profile.weight);
+      const challenge5k30Record = {
+        id: Date.now().toString(),
+        title,
+        date: new Date().toLocaleDateString('pt-PT'),
+        startTime: capturedStartTime ? new Date(capturedStartTime).toISOString() : null,
+        endTime: new Date().toISOString(),
+        timeSec: finalSec,
+        distanceKm: finalDist.toFixed(2),
+        pace: calculatePace(finalDist, finalSec) ?? '0.00',
+        calories: recordCalories,
+        speed: finalSpeed,
+        vo2Max: null,
+        failed: !success,
+        metersDone,
+        metersMissing,
+        metersTarget,
+      };
+
+      const updatedHistory = [challenge5k30Record, ...history];
+      setHistory(updatedHistory);
+      updateRecordsFromHistory(updatedHistory);
+      await AsyncStorage.setItem('@user_history', JSON.stringify(updatedHistory));
+      syncExerciseRecordToHealthConnect(challenge5k30Record).catch(() => {});
+
+      setSuddenDeathResultData({
+        success,
+        failedAtBlock: null,
+        metersDone,
+        metersMissing,
+        metersTarget,
+        timeSec: finalSec,
+        calories: recordCalories,
+      });
+      setShowSuddenDeathResultModal(true);
+      return;
+    }
+
     let vo2Val = null;
     let finishMessage = 'Parabéns! Completou o treino com sucesso!';
     playAudio(finishMessage);

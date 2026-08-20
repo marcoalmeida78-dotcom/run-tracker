@@ -13,6 +13,7 @@
 // chama — uma falha aqui não pode nunca interromper o fluxo normal da app
 // (o registo já está gravado no histórico local antes de isto ser chamado).
 // ============================================================================
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { logEvent } from './debugLog';
 
@@ -29,11 +30,17 @@ const WRITE_PERMISSIONS = [
 // Carregado de forma preguiçosa (lazy) — em vez de import estático no topo do
 // ficheiro — porque este módulo agora é importado por index.js, que corre em
 // qualquer plataforma (incluindo o preview web); um import estático de uma
-// biblioteca nativa Android-only rebentaria esse caso.
+// biblioteca nativa Android-only rebentaria esse caso. Usa require() (não
+// import() dinâmico) porque continua a ser preguiçoso — só corre quando a
+// função é chamada, sempre depois do Platform.OS === 'android' — mas é
+// suportado tanto pelo Metro como pelos testes automáticos (Jest), ao
+// contrário de import() dinâmico.
+// (O AsyncStorage, ao contrário desta, funciona em todas as plataformas —
+// por isso é importado normalmente no topo do ficheiro, como no resto da app.)
 const loadHealthConnect = async () => {
   if (Platform.OS !== 'android') return null;
   try {
-    return await import('react-native-health-connect');
+    return require('react-native-health-connect');
   } catch (e) {
     logEvent('HealthConnectSync', 'Biblioteca react-native-health-connect indisponível.', e);
     return null;
@@ -42,7 +49,6 @@ const loadHealthConnect = async () => {
 
 export const isHealthConnectSyncEnabled = async () => {
   try {
-    const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
     const saved = await AsyncStorage.getItem(SYNC_ENABLED_KEY);
     return saved === 'true';
   } catch (e) {
@@ -52,7 +58,6 @@ export const isHealthConnectSyncEnabled = async () => {
 
 export const setHealthConnectSyncEnabled = async (enabled) => {
   try {
-    const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
     await AsyncStorage.setItem(SYNC_ENABLED_KEY, enabled ? 'true' : 'false');
   } catch (e) {}
 };
@@ -97,14 +102,18 @@ export const requestHealthConnectWritePermissions = async () => {
  * Connect, para a app de Saúde o conseguir ler. Fire-and-forget: nunca
  * lança erro, e não bloqueia a UI de quem chama (não é preciso `await`).
  *
+ * Sincroniza também os treinos falhados (ex: Morte Súbita, Desafio 5km em 30
+ * Minutos) — o exercício aconteceu na mesma (distância percorrida, calorias
+ * gastas), mesmo que o objetivo do desafio não tenha sido cumprido.
+ *
  * @param {object} record - o mesmo objeto já gravado em @user_history
- *   (precisa de startTime/endTime válidos — registos sem essas datas, ou
- *   marcados como `failed`, não são sincronizados).
+ *   (precisa de startTime/endTime válidos — registos sem essas datas não são
+ *   sincronizados, já que o Health Connect exige uma sessão com duração).
  */
 export const syncExerciseRecordToHealthConnect = async (record) => {
   try {
     if (Platform.OS !== 'android') return;
-    if (!record || record.failed) return;
+    if (!record) return;
     if (!record.startTime || !record.endTime) return;
 
     const enabled = await isHealthConnectSyncEnabled();
@@ -168,8 +177,30 @@ export const syncExerciseRecordToHealthConnect = async (record) => {
       });
     }
 
-    await hc.insertRecords(records);
-    logEvent('HealthConnectSync', 'Treino sincronizado com o Health Connect', { title: record.title });
+    // A biblioteca só aceita um insertRecords() por CHAMADA com registos todos
+    // do mesmo tipo (rejeita listas mistas com "All records must have the
+    // same type") — por isso agrupamos os registos por tipo e fazemos uma
+    // chamada por grupo, em vez de uma única chamada com tudo misturado. Cada
+    // grupo é isolado no seu próprio try/catch: se um tipo falhar (ex: VO2
+    // Máx), os restantes (sessão, calorias, distância) continuam a ser
+    // gravados na mesma.
+    const recordsByType = records.reduce((groups, rec) => {
+      (groups[rec.recordType] = groups[rec.recordType] || []).push(rec);
+      return groups;
+    }, {});
+
+    let anySuccess = false;
+    for (const [recordType, group] of Object.entries(recordsByType)) {
+      try {
+        await hc.insertRecords(group);
+        anySuccess = true;
+      } catch (typeError) {
+        logEvent('HealthConnectSync', `Erro ao sincronizar registos do tipo ${recordType}`, typeError);
+      }
+    }
+    if (anySuccess) {
+      logEvent('HealthConnectSync', 'Treino sincronizado com o Health Connect', { title: record.title });
+    }
   } catch (error) {
     // Nunca deixa a sincronização (uma funcionalidade extra) afetar o fluxo
     // principal da app — o treino já está gravado no histórico local.

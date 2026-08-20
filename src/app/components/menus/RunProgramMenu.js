@@ -26,8 +26,16 @@ export default function RunProgramMenu({
         const isCurrentLevel = index === currentLevelIndex;
         const isOpen = activeLevelAccordion === lvl.id;
 
+        // Quantas das 3 sessões deste nível já foram concluídas — usado para
+        // o indicador de progresso no cabeçalho (visível mesmo fechado).
+        const levelDoneCount = lvl.sessions.reduce((count, _sess, sIdx) => {
+          const globalIdx = index * 3 + sIdx;
+          return completedSessions.includes(globalIdx) ? count + 1 : count;
+        }, 0);
+        const isLevelComplete = levelDoneCount === lvl.sessions.length;
+
         return (
-          <View key={lvl.id} style={styles.levelCard}>
+          <View key={lvl.id} style={[styles.levelCard, isLevelComplete && styles.levelCardComplete]}>
             <TouchableOpacity
               style={[styles.levelHeader, isCurrentLevel && styles.levelHeaderActive]}
               onPress={() => onToggleLevelAccordion(lvl.id)}
@@ -37,6 +45,13 @@ export default function RunProgramMenu({
                 <Text style={[styles.levelTitle, isCurrentLevel && styles.levelTitleActiveText]}>
                   {lvl.title} {isCurrentLevel ? '(ATUAL)' : ''}
                 </Text>
+                <View style={styles.levelProgressRow}>
+                  {lvl.sessions.map((_sess, sIdx) => {
+                    const globalIdx = index * 3 + sIdx;
+                    const done = completedSessions.includes(globalIdx);
+                    return <View key={sIdx} style={[styles.levelProgressDot, done && styles.levelProgressDotDone]} />;
+                  })}
+                </View>
               </View>
               <Text style={styles.levelChevron}>{isOpen ? '▲ FECHAR' : '▼'}</Text>
             </TouchableOpacity>

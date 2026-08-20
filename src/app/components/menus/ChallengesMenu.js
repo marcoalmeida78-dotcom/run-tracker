@@ -13,6 +13,10 @@ export default function ChallengesMenu({ styles, onClose, onStartExercise, histo
         </TouchableOpacity>
       </View>
 
+      <TouchableOpacity style={styles.itemBtn} onPress={() => onStartExercise('run_normal', 'Corrida livre')}>
+        <Text style={styles.itemBtnText}>Corrida livre</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity style={styles.itemBtn} onPress={() => onStartExercise('challenge_cooper', 'Teste de Cooper (12 min)', { targetTimeSec: 720 })}>
         <Text style={styles.itemBtnText}>Teste de Cooper (12 min)</Text>
         {bestCooper && <Text style={styles.itemBtnSubText}>🏅 O teu melhor: {bestCooper.label}</Text>}
@@ -28,6 +32,10 @@ export default function ChallengesMenu({ styles, onClose, onStartExercise, histo
 
       <TouchableOpacity style={styles.itemBtn} onPress={() => onStartExercise('challenge_morte_subita', 'Desafio Morte Súbita (1000m)', { targetDistKm: 1.0 })}>
         <Text style={styles.itemBtnText}>Desafio Morte Súbita (1000m)</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.itemBtn} onPress={() => onStartExercise('challenge_5k30', 'Desafio 5km em 30 Minutos', { targetDistKm: 5.0, targetTimeSec: 1800 })}>
+        <Text style={styles.itemBtnText}>Desafio 5km em 30 Minutos</Text>
       </TouchableOpacity>
     </View>
   );

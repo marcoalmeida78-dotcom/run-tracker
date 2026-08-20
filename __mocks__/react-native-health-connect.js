@@ -17,6 +17,7 @@ module.exports = {
   getGrantedPermissions: jest.fn(() => Promise.resolve([])),
   requestPermission: jest.fn(() => Promise.resolve([])),
   readRecords: jest.fn(() => Promise.resolve({ records: [] })),
+  insertRecords: jest.fn(() => Promise.resolve(['id'])),
   getSdkStatus: jest.fn(() => Promise.resolve(3)),
   SdkAvailabilityStatus: {
     SDK_UNAVAILABLE: 1,
