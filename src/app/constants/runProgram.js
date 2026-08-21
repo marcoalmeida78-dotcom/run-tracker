@@ -1,14 +1,14 @@
 // --- CONFIGURAÇÃO DO DESAFIO MORTE SÚBITA ---
 export const SUDDEN_DEATH_BLOCKS = [
-  { block: 1, distKm: 0.1, timeSec: 60 },
-  { block: 2, distKm: 0.1, timeSec: 50 },
-  { block: 3, distKm: 0.1, timeSec: 45 },
-  { block: 4, distKm: 0.1, timeSec: 40 },
-  { block: 5, distKm: 0.1, timeSec: 35 },
-  { block: 6, distKm: 0.1, timeSec: 30 },
-  { block: 7, distKm: 0.1, timeSec: 28 },
-  { block: 8, distKm: 0.1, timeSec: 25 },
-  { block: 9, distKm: 0.1, timeSec: 22 },
+  { block: 1, distKm: 0.1, timeSec: 65 },
+  { block: 2, distKm: 0.1, timeSec: 60 },
+  { block: 3, distKm: 0.1, timeSec: 55 },
+  { block: 4, distKm: 0.1, timeSec: 50 },
+  { block: 5, distKm: 0.1, timeSec: 45 },
+  { block: 6, distKm: 0.1, timeSec: 40 },
+  { block: 7, distKm: 0.1, timeSec: 35 },
+  { block: 8, distKm: 0.1, timeSec: 30 },
+  { block: 9, distKm: 0.1, timeSec: 25 },
   { block: 10, distKm: 0.1, timeSec: 20 },
 ];
 

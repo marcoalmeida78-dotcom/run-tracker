@@ -13,6 +13,7 @@ import {
   calculate15MilesVo2Max,
   calculate1MileRunVo2Max,
   getBestTimeForTitle,
+  getGpsNoiseFloorKm,
   getSuddenDeathProgress,
   generateTimeline,
   formatHMS,
@@ -81,6 +82,39 @@ describe('getSuddenDeathProgress', () => {
 
   it('nunca ultrapassa o total (ex: GPS com alguma distância a mais), fica sempre a 0 em falta', () => {
     expect(getSuddenDeathProgress(1.2)).toEqual({ metersDone: 1000, metersMissing: 0, metersTarget: 1000 });
+  });
+});
+
+describe('getGpsNoiseFloorKm', () => {
+  // Bug real relatado: o mesmo percurso a dar 5.01km numa sessão e 3.98km
+  // noutra — causado por o limiar mínimo de movimento (1m, fixo) não filtrar
+  // o ruído normal do GPS. Estes testes fixam o comportamento do novo filtro.
+  it('nunca desce abaixo do piso de 4m, mesmo com excelente precisão (accuracy baixa)', () => {
+    expect(getGpsNoiseFloorKm(1)).toBeCloseTo(0.004, 5);
+    expect(getGpsNoiseFloorKm(0)).toBeCloseTo(0.004, 5);
+  });
+
+  it('sobe com a precisão reportada pelo GPS (accuracy pior → limiar maior)', () => {
+    const floorGood = getGpsNoiseFloorKm(5); // GPS excelente
+    const floorBad = getGpsNoiseFloorKm(30); // GPS fraco (perto de árvores/prédios)
+    expect(floorBad).toBeGreaterThan(floorGood);
+  });
+
+  it('é 70% da precisão reportada, em km, quando essa precisão excede o piso de 4m', () => {
+    // accuracy=30m → 30*0.7=21m=0.021km (> piso de 4m, por isso prevalece)
+    expect(getGpsNoiseFloorKm(30)).toBeCloseTo(0.021, 5);
+  });
+
+  it('trata accuracy nula/indefinida como 0 (sem rebentar), aplicando só o piso', () => {
+    expect(getGpsNoiseFloorKm(null)).toBeCloseTo(0.004, 5);
+    expect(getGpsNoiseFloorKm(undefined)).toBeCloseTo(0.004, 5);
+    expect(getGpsNoiseFloorKm(NaN)).toBeCloseTo(0.004, 5);
+  });
+
+  it('um salto de GPS de 1m (o limiar antigo) é sempre tratado como ruído, não como distância', () => {
+    const oneMeterKm = 0.001;
+    expect(oneMeterKm).toBeLessThan(getGpsNoiseFloorKm(5));
+    expect(oneMeterKm).toBeLessThan(getGpsNoiseFloorKm(30));
   });
 });
 

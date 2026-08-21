@@ -37,6 +37,7 @@ import {
   calculateRockportVo2Max,
   generateTimeline,
   getBestTimeForTitle,
+  getGpsNoiseFloorKm,
   getSuddenDeathProgress,
 } from './utils/calculations';
 import {
@@ -740,7 +741,7 @@ export default function App() {
       // e a paragem efetiva da tarefa de localização em segundo plano).
       if (!isExercisingRef.current || isPausedRef.current || isFinishingRef.current) return;
 
-      const { latitude, longitude, speed: currentSpeed } = loc.coords;
+      const { latitude, longitude, speed: currentSpeed, accuracy } = loc.coords;
       const speedKmH = currentSpeed && currentSpeed > 0 ? (currentSpeed * 3.6).toFixed(1) : 0;
       setSpeed(speedKmH);
       speedRef.current = speedKmH;
@@ -754,7 +755,14 @@ export default function App() {
       let newDist = distanceRef.current;
       if (lastLocation.current) {
         const added = calculateHaversine(lastLocation.current.latitude, lastLocation.current.longitude, latitude, longitude);
-        if (added > 0.001) {
+
+        // --- Filtro de ruído de GPS ---
+        // Ver getGpsNoiseFloorKm em utils/calculations.js para a explicação
+        // completa: sem isto, cada pequeno "salto" de ruído do GPS era
+        // somado como se fosse distância a sério (bug real relatado: o mesmo
+        // percurso a dar 5.01km numa sessão e 3.98km noutra).
+        const noiseFloorKm = getGpsNoiseFloorKm(accuracy);
+        if (added > noiseFloorKm) {
           newDist = distanceRef.current + added;
           setDistance(newDist);
           distanceRef.current = newDist;

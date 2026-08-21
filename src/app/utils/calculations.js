@@ -19,6 +19,29 @@ export const calculateHaversine = (lat1, lon1, lat2, lon2) => {
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 };
 
+// --- FILTRO DE RUÍDO DE GPS ---
+// O GPS "vagueia" alguns metros em torno da posição real mesmo parado ou a
+// andar devagar (mais notório nos troços de caminhada dos intervalos, onde o
+// movimento real é lento — comparável ao próprio ruído do GPS). Sem filtro,
+// cada pequeno "salto" de ruído entre duas leituras era somado como se fosse
+// distância percorrida a sério, inflacionando o total ao longo de uma sessão
+// inteira (bug real relatado: o mesmo percurso a dar 5.01km numa sessão e
+// 3.98km noutra).
+//
+// Devolve, em km, a distância mínima entre duas leituras de GPS consecutivas
+// para essa distância poder ser considerada movimento real (e não ruído) e
+// somada ao total. Acompanha a precisão que o próprio GPS reporta para a
+// leitura (accuracyMeters, o raio de incerteza em metros que o dispositivo
+// devolve com cada posição): em boas condições mantém-se perto de um piso de
+// 4m; em condições piores (perto de árvores/prédios, accuracy pior) sobe,
+// para não confundir ruído com movimento real — mas nunca deixa de contar
+// por completo, mesmo com sinal fraco, para não subcontar distância
+// percorrida a sério nesses troços.
+export const getGpsNoiseFloorKm = (accuracyMeters) => {
+  const acc = typeof accuracyMeters === 'number' && !Number.isNaN(accuracyMeters) ? accuracyMeters : 0;
+  return Math.max(0.004, (Math.max(0, acc) * 0.7) / 1000);
+};
+
 // --- RITMO (MIN/KM) ---
 // Ritmo médio = tempo decorrido (em minutos) a dividir pela distância percorrida
 // (em km) — fórmula correta e igual à que já estava espalhada por vários
