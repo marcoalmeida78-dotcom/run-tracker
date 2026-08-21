@@ -7,14 +7,20 @@
 // ============================================================================
 import {
   calculateHaversine,
+  calculateVincenty,
   calculateCalories,
   calculatePace,
   calculateRockportVo2Max,
   calculate15MilesVo2Max,
   calculate1MileRunVo2Max,
+  calculateRouteDistanceKm,
   getBestTimeForTitle,
-  getGpsNoiseFloorKm,
+  getFinalDistanceKm,
   getSuddenDeathProgress,
+  GPS_MIN_MOVEMENT_KM,
+  isGpsAccuracyAcceptable,
+  isSegmentSpeedPlausible,
+  simplifyRouteDouglasPeucker,
   generateTimeline,
   formatHMS,
 } from '../utils/calculations';
@@ -85,36 +91,178 @@ describe('getSuddenDeathProgress', () => {
   });
 });
 
-describe('getGpsNoiseFloorKm', () => {
-  // Bug real relatado: o mesmo percurso a dar 5.01km numa sessão e 3.98km
-  // noutra — causado por o limiar mínimo de movimento (1m, fixo) não filtrar
-  // o ruído normal do GPS. Estes testes fixam o comportamento do novo filtro.
-  it('nunca desce abaixo do piso de 4m, mesmo com excelente precisão (accuracy baixa)', () => {
-    expect(getGpsNoiseFloorKm(1)).toBeCloseTo(0.004, 5);
-    expect(getGpsNoiseFloorKm(0)).toBeCloseTo(0.004, 5);
+describe('calculateVincenty', () => {
+  it('devolve 0 para o mesmo ponto', () => {
+    expect(calculateVincenty(38.7223, -9.1393, 38.7223, -9.1393)).toBeCloseTo(0, 5);
   });
 
-  it('sobe com a precisão reportada pelo GPS (accuracy pior → limiar maior)', () => {
-    const floorGood = getGpsNoiseFloorKm(5); // GPS excelente
-    const floorBad = getGpsNoiseFloorKm(30); // GPS fraco (perto de árvores/prédios)
-    expect(floorBad).toBeGreaterThan(floorGood);
+  it('dá um valor muito próximo do Haversine para distâncias curtas (diferença <0.5%)', () => {
+    // Para distâncias curtas (o caso real desta app — uma sessão de treino),
+    // Vincenty e Haversine só divergem pela ligeira diferença entre uma
+    // esfera perfeita e o elipsoide WGS-84 — a diferença é pequena mas
+    // sistemática, e é precisamente essa a razão de trocar de fórmula.
+    const hav = calculateHaversine(38.7223, -9.1393, 38.73, -9.15);
+    const vin = calculateVincenty(38.7223, -9.1393, 38.73, -9.15);
+    const diffPct = Math.abs(vin - hav) / hav;
+    expect(diffPct).toBeLessThan(0.005);
   });
 
-  it('é 70% da precisão reportada, em km, quando essa precisão excede o piso de 4m', () => {
-    // accuracy=30m → 30*0.7=21m=0.021km (> piso de 4m, por isso prevalece)
-    expect(getGpsNoiseFloorKm(30)).toBeCloseTo(0.021, 5);
+  it('no equador, 1 grau de latitude ≈ 110.57 km no elipsoide WGS-84 (difere do valor esférico do Haversine, 111.19 km — é exatamente essa correção que o Vincenty introduz)', () => {
+    expect(calculateVincenty(0, 0, 1, 0)).toBeCloseTo(110.57, 1);
   });
 
-  it('trata accuracy nula/indefinida como 0 (sem rebentar), aplicando só o piso', () => {
-    expect(getGpsNoiseFloorKm(null)).toBeCloseTo(0.004, 5);
-    expect(getGpsNoiseFloorKm(undefined)).toBeCloseTo(0.004, 5);
-    expect(getGpsNoiseFloorKm(NaN)).toBeCloseTo(0.004, 5);
+  it('a distância aumenta de forma monótona com a diferença de latitude', () => {
+    const d1 = calculateVincenty(0, 0, 0.001, 0);
+    const d2 = calculateVincenty(0, 0, 0.01, 0);
+    const d3 = calculateVincenty(0, 0, 0.1, 0);
+    expect(d2).toBeGreaterThan(d1);
+    expect(d3).toBeGreaterThan(d2);
+  });
+});
+
+describe('isGpsAccuracyAcceptable', () => {
+  it('aceita leituras com boa precisão (accuracy <= 25m)', () => {
+    expect(isGpsAccuracyAcceptable(5)).toBe(true);
+    expect(isGpsAccuracyAcceptable(25)).toBe(true);
   });
 
-  it('um salto de GPS de 1m (o limiar antigo) é sempre tratado como ruído, não como distância', () => {
-    const oneMeterKm = 0.001;
-    expect(oneMeterKm).toBeLessThan(getGpsNoiseFloorKm(5));
-    expect(oneMeterKm).toBeLessThan(getGpsNoiseFloorKm(30));
+  it('rejeita leituras com fraca precisão (accuracy > 25m)', () => {
+    expect(isGpsAccuracyAcceptable(26)).toBe(false);
+    expect(isGpsAccuracyAcceptable(100)).toBe(false);
+  });
+
+  it('não rejeita só por falta de informação de precisão (accuracy nula/indefinida)', () => {
+    expect(isGpsAccuracyAcceptable(null)).toBe(true);
+    expect(isGpsAccuracyAcceptable(undefined)).toBe(true);
+    expect(isGpsAccuracyAcceptable(NaN)).toBe(true);
+  });
+});
+
+describe('GPS_MIN_MOVEMENT_KM (piso de movimento mínimo)', () => {
+  // Bug grave relatado após a primeira versão deste filtro: fazer o piso
+  // SUBIR com a accuracy (ex: 70% da accuracy) parecia razoável em teoria,
+  // mas como as leituras de GPS chegam a cada ~1 segundo, o movimento real
+  // nesse intervalo (1-4m a correr/andar) já é da mesma ordem de grandeza da
+  // própria margem de erro do GPS (normal rondar os 10-20m) — o filtro
+  // acabava por rejeitar quase todo o movimento real (distância parada,
+  // pausas por "inatividade" mesmo em andamento). Por isso o piso tem de ser
+  // pequeno e FIXO, não escalado.
+  it('é um valor pequeno e fixo (1.5m), não uma função', () => {
+    expect(GPS_MIN_MOVEMENT_KM).toBeCloseTo(0.0015, 5);
+  });
+
+  it('um segundo de corrida lenta (~2m/s → ~2m por leitura) ultrapassa o piso', () => {
+    const metersPerReading = 2;
+    expect(metersPerReading / 1000).toBeGreaterThan(GPS_MIN_MOVEMENT_KM);
+  });
+});
+
+describe('isSegmentSpeedPlausible', () => {
+  it('aceita velocidades normais de corrida/caminhada', () => {
+    // 3m em 1s = 10.8 km/h (corrida moderada)
+    expect(isSegmentSpeedPlausible(0.003, 1)).toBe(true);
+  });
+
+  it('rejeita um salto de GPS que implique uma velocidade impossível a pé', () => {
+    // 50m num único segundo = 180 km/h — impossível a pé, é erro de GPS
+    expect(isSegmentSpeedPlausible(0.05, 1)).toBe(false);
+  });
+
+  it('não rejeita só por falta de intervalo de tempo válido (dt nulo, zero ou negativo)', () => {
+    expect(isSegmentSpeedPlausible(0.05, null)).toBe(true);
+    expect(isSegmentSpeedPlausible(0.05, 0)).toBe(true);
+    expect(isSegmentSpeedPlausible(0.05, -1)).toBe(true);
+  });
+});
+
+describe('simplifyRouteDouglasPeucker', () => {
+  it('mantém uma linha reta praticamente igual (sem pontos redundantes a remover)', () => {
+    const straightLine = [
+      { latitude: 0, longitude: 0 },
+      { latitude: 0.001, longitude: 0 },
+      { latitude: 0.002, longitude: 0 },
+      { latitude: 0.003, longitude: 0 },
+    ];
+    const simplified = simplifyRouteDouglasPeucker(straightLine);
+    expect(simplified.length).toBe(2); // só os extremos, pontos do meio são colineares
+    expect(simplified[0]).toEqual(straightLine[0]);
+    expect(simplified[simplified.length - 1]).toEqual(straightLine[3]);
+  });
+
+  it('remove um "zigue-zague" de ruído entre dois pontos praticamente parados', () => {
+    const noisyStationary = [
+      { latitude: 38.7223, longitude: -9.1393 },
+      { latitude: 38.72231, longitude: -9.13929 }, // ruído ~1-2m
+      { latitude: 38.72229, longitude: -9.13931 }, // ruído ~1-2m
+      { latitude: 38.7223, longitude: -9.1393 },
+    ];
+    const simplified = simplifyRouteDouglasPeucker(noisyStationary);
+    expect(simplified.length).toBeLessThan(noisyStationary.length);
+  });
+
+  it('mantém uma curva real (desvio grande o suficiente para não ser ruído)', () => {
+    const realCurve = [
+      { latitude: 0, longitude: 0 },
+      { latitude: 0.001, longitude: 0.001 }, // desvio de dezenas de metros — é a estrada a virar
+      { latitude: 0.002, longitude: 0 },
+    ];
+    const simplified = simplifyRouteDouglasPeucker(realCurve);
+    expect(simplified.length).toBe(3); // mantém o ponto da curva
+  });
+
+  it('devolve o próprio array (copiado) para menos de 3 pontos', () => {
+    const twoPoints = [
+      { latitude: 0, longitude: 0 },
+      { latitude: 1, longitude: 1 },
+    ];
+    expect(simplifyRouteDouglasPeucker(twoPoints)).toEqual(twoPoints);
+  });
+});
+
+describe('calculateRouteDistanceKm', () => {
+  it('soma a distância Vincenty entre pontos consecutivos', () => {
+    const points = [
+      { latitude: 0, longitude: 0 },
+      { latitude: 0.01, longitude: 0 },
+      { latitude: 0.02, longitude: 0 },
+    ];
+    const total = calculateRouteDistanceKm(points);
+    const expected = calculateVincenty(0, 0, 0.01, 0) + calculateVincenty(0.01, 0, 0.02, 0);
+    expect(total).toBeCloseTo(expected, 6);
+  });
+
+  it('devolve 0 para menos de 2 pontos', () => {
+    expect(calculateRouteDistanceKm([])).toBe(0);
+    expect(calculateRouteDistanceKm([{ latitude: 0, longitude: 0 }])).toBe(0);
+  });
+});
+
+describe('getFinalDistanceKm', () => {
+  // Esta é a correção do bug relatado (5.01km vs 3.98km no mesmo percurso):
+  // no fim da sessão, a distância gravada passa a ser recalculada a partir do
+  // trajeto GPS completo e simplificado, em vez do valor acumulado ao vivo.
+  // Por construção geométrica (desigualdade triangular), simplificar um
+  // trajeto nunca pode torná-lo mais comprido — por isso o valor recalculado
+  // nunca pode ser MAIOR do que a soma bruta ponto-a-ponto do mesmo trajeto.
+  it('para um trajeto com ruído, o valor recalculado nunca excede a soma bruta ponto-a-ponto', () => {
+    const noisyRoute = [
+      { latitude: 38.7223, longitude: -9.1393 },
+      { latitude: 38.72235, longitude: -9.13925 },
+      { latitude: 38.7224, longitude: -9.1392 },
+      { latitude: 38.72235, longitude: -9.13925 }, // "recuo" de ruído
+      { latitude: 38.7225, longitude: -9.1391 },
+      { latitude: 38.7226, longitude: -9.139 },
+    ];
+    const rawSum = calculateRouteDistanceKm(noisyRoute);
+    const cleaned = getFinalDistanceKm(noisyRoute, rawSum);
+    expect(cleaned).toBeLessThanOrEqual(rawSum + 1e-9);
+  });
+
+  it('cai em segurança para o valor ao vivo com poucos pontos GPS (sessão muito curta)', () => {
+    const tooFewPoints = [{ latitude: 0, longitude: 0 }, { latitude: 0.001, longitude: 0 }];
+    expect(getFinalDistanceKm(tooFewPoints, 1.23)).toBe(1.23);
+    expect(getFinalDistanceKm(null, 1.23)).toBe(1.23);
+    expect(getFinalDistanceKm([], 1.23)).toBe(1.23);
   });
 });
 

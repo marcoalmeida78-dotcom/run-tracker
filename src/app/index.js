@@ -30,15 +30,18 @@ import {
 } from './utils/healthConnectSync';
 import {
   calculateCalories,
-  calculateHaversine,
   calculate15MilesVo2Max,
   calculate1MileRunVo2Max,
   calculatePace,
   calculateRockportVo2Max,
+  calculateVincenty,
   generateTimeline,
   getBestTimeForTitle,
-  getGpsNoiseFloorKm,
+  getFinalDistanceKm,
   getSuddenDeathProgress,
+  GPS_MIN_MOVEMENT_KM,
+  isGpsAccuracyAcceptable,
+  isSegmentSpeedPlausible,
 } from './utils/calculations';
 import {
   calculateCooperVo2Max,
@@ -132,6 +135,7 @@ export default function App() {
 
   const locationTaskActiveRef = useRef(false);
   const lastLocation = useRef(null);
+  const lastLocationTimestampRef = useRef(null);
   const routeCoordsRef = useRef([]);
   const currentCoordRef = useRef(null);
   const webviewRef = useRef(null);
@@ -226,7 +230,8 @@ export default function App() {
     const capturedStartTime = startTimeRef.current;
     const capturedTitle = exerciseTitleRef.current;
     const capturedSec = secondsRef.current;
-    const capturedDist = distanceRef.current;
+    const capturedRoute = routeCoordsRef.current;
+    const capturedDist = getFinalDistanceKm(capturedRoute, distanceRef.current);
     const capturedSpeed = speedRef.current;
     stopAndCleanupExercise();
     Vibration.vibrate([400, 200, 400]);
@@ -714,6 +719,7 @@ export default function App() {
     distanceRef.current = 0;
     speedRef.current = 0;
     lastLocation.current = null;
+    lastLocationTimestampRef.current = null;
 
     routeCoordsRef.current = [];
     currentCoordRef.current = null;
@@ -746,23 +752,38 @@ export default function App() {
       setSpeed(speedKmH);
       speedRef.current = speedKmH;
 
-      // Ponto 3: Deteção de velocidade excessiva em veículo (> 25 km/h)
+      // Ponto 3: Deteção de velocidade excessiva em veículo (> 25 km/h) —
+      // usa a velocidade instantânea do próprio GPS (mais estável que uma
+      // distância/tempo entre dois pontos), por isso pausa a sessão toda.
       if (parseFloat(speedKmH) > 25) {
         triggerSafetyPause('speed');
         return;
       }
 
+      // --- Filtro 1: rejeição por precisão ---
+      // Leituras pouco fiáveis (accuracy > 25m) são ignoradas por completo:
+      // nem contam distância, nem passam a ser a posição de referência da
+      // leitura seguinte. Ver isGpsAccuracyAcceptable em utils/calculations.js
+      // (e a nota lá sobre a versão anterior deste filtro, que causou uma
+      // regressão grave).
+      if (!isGpsAccuracyAcceptable(accuracy)) {
+        return;
+      }
+
       let newDist = distanceRef.current;
       if (lastLocation.current) {
-        const added = calculateHaversine(lastLocation.current.latitude, lastLocation.current.longitude, latitude, longitude);
+        const added = calculateVincenty(lastLocation.current.latitude, lastLocation.current.longitude, latitude, longitude);
 
-        // --- Filtro de ruído de GPS ---
-        // Ver getGpsNoiseFloorKm em utils/calculations.js para a explicação
-        // completa: sem isto, cada pequeno "salto" de ruído do GPS era
-        // somado como se fosse distância a sério (bug real relatado: o mesmo
-        // percurso a dar 5.01km numa sessão e 3.98km noutra).
-        const noiseFloorKm = getGpsNoiseFloorKm(accuracy);
-        if (added > noiseFloorKm) {
+        // --- Filtro 3: velocidade implausível neste segmento específico ---
+        // Não pausa o treino (ao contrário do filtro de velocidade acima) —
+        // só ignora este salto pontual de GPS.
+        const deltaSeconds = lastLocationTimestampRef.current != null && loc.timestamp
+          ? (loc.timestamp - lastLocationTimestampRef.current) / 1000
+          : null;
+        const plausible = isSegmentSpeedPlausible(added, deltaSeconds);
+
+        // --- Filtro 2: movimento mínimo por leitura (piso fixo, pequeno) ---
+        if (plausible && added > GPS_MIN_MOVEMENT_KM) {
           newDist = distanceRef.current + added;
           setDistance(newDist);
           distanceRef.current = newDist;
@@ -784,8 +805,20 @@ export default function App() {
             setShowEsquinaModal(true);
           }
         }
+
+        // Um salto implausível não deve servir de base à leitura seguinte
+        // (senão a leitura seguinte "salta de volta" e também é rejeitada) —
+        // fica-se pela última posição de confiança até uma leitura plausível.
+        if (!plausible) {
+          const newRoutePoint = { latitude, longitude };
+          currentCoordRef.current = newRoutePoint;
+          pushMapUpdate();
+          tickExercise(Date.now(), newDist, speedKmH);
+          return;
+        }
       }
       lastLocation.current = { latitude, longitude };
+      lastLocationTimestampRef.current = loc.timestamp ?? Date.now();
 
       const newRoutePoint = { latitude, longitude };
       routeCoordsRef.current = [...routeCoordsRef.current, newRoutePoint];
@@ -965,6 +998,7 @@ export default function App() {
     routeCoordsRef.current = [];
     currentCoordRef.current = null;
     lastLocation.current = null;
+    lastLocationTimestampRef.current = null;
     clearMapRoute();
   };
 
@@ -980,6 +1014,9 @@ export default function App() {
     // (bug corrigido: o registo ficava sempre com startTime nulo e título vazio).
     const capturedStartTime = startTimeRef.current;
     const capturedTitle = exerciseTitleRef.current;
+    // Ver nota equivalente em autoFinishExercise.
+    const capturedRoute = routeCoordsRef.current;
+    currentDist = getFinalDistanceKm(capturedRoute, currentDist);
     stopAndCleanupExercise();
     Vibration.vibrate([400, 200, 400]);
     playAudio(`Tempo esgotado no bloco ${configBlock.block}. Desafio Morte Súbita não concluído.`);
@@ -1031,6 +1068,15 @@ export default function App() {
     isFinishingRef.current = true;
     // Captura ANTES de limpar — ver nota em handleSuddenDeathFailure.
     const capturedStartTime = startTimeRef.current;
+    // Captura o trajeto GPS completo ANTES de stopAndCleanupExercise() o
+    // esvaziar, para poder recalcular a distância final a partir dele (ver
+    // getFinalDistanceKm em utils/calculations.js). Reatribuir finalDist aqui,
+    // uma única vez, propaga o valor corrigido para todos os ramos abaixo
+    // (Morte Súbita, 5km/30min, genérico, e também para o fluxo de
+    // batimentos cardíacos em finalizePendingTest, que recebe este mesmo
+    // valor através de pendingFinishRef.current).
+    const capturedRoute = routeCoordsRef.current;
+    finalDist = getFinalDistanceKm(capturedRoute, finalDist);
     stopAndCleanupExercise();
     Vibration.vibrate([500, 300, 500]);
 
