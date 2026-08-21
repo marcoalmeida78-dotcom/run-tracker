@@ -1,5 +1,6 @@
 import { Text, TouchableOpacity, View } from 'react-native';
 import { formatHMS } from '../../utils/calculations';
+import { SUDDEN_DEATH_BLOCKS } from '../../constants/runProgram';
 
 export default function HistoryMenu({ styles, onClose, history, onDeleteHistoryItem }) {
   return (
@@ -27,7 +28,7 @@ export default function HistoryMenu({ styles, onClose, history, onDeleteHistoryI
             {item.failed && (
               <Text style={styles.historyFailedBadge}>
                 {item.failedAtBlock != null
-                  ? `Não concluído — parou no bloco ${item.failedAtBlock} / 10`
+                  ? `Não concluído — parou no bloco ${item.failedAtBlock} / ${SUDDEN_DEATH_BLOCKS.length}`
                   : 'Não concluído'}
               </Text>
             )}

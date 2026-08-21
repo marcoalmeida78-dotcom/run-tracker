@@ -590,7 +590,7 @@ export default function App() {
       if (configBlock) {
         const blockDistKm = currentDist - suddenDeathBlockStartDistRef.current;
         if (blockDistKm >= configBlock.distKm) {
-          if (suddenDeathBlockRef.current >= 10) {
+          if (suddenDeathBlockRef.current >= SUDDEN_DEATH_BLOCKS.length) {
             autoFinishExercise(exerciseTypeRef.current, exerciseTitleRef.current, currentSec, currentDist, currentSpeed, activeConfigRef.current);
             return;
           }

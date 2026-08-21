@@ -3,6 +3,7 @@ import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { getLeafletMapHtml } from '../constants/mapHtml';
 import { LIME_GREEN } from '../constants/mapColors';
+import { SUDDEN_DEATH_BLOCKS } from '../constants/runProgram';
 import { calculateCalories, calculatePace, formatHMS } from '../utils/calculations';
 
 export default function ActiveExerciseScreen({
@@ -84,19 +85,22 @@ export default function ActiveExerciseScreen({
         />
       </View>
 
-      {/* Card Morte Súbita — cada bloco são sempre 100m fixos; o tempo
-          disponível é que diminui a cada bloco (ver constants/runProgram.js).
-          Os valores de progresso/tempo já vêm calculados corretamente por
-          bloco a partir do index.js — nada é recalculado aqui. */}
-      {exerciseType === 'challenge_morte_subita' && (
-        <View style={styles.rockportProgressCard}>
-          <View style={styles.rockportHeaderRow}>
-            <Text style={styles.rockportLabel}>BLOCO ATUAL: {suddenDeathBlock} / 10</Text>
-            <Text style={styles.rockportValue}>{suddenDeathBlockProgressM ?? 0} / 100 m</Text>
-          </View>
-          <View style={styles.progressBarBackground}>
-            <View style={[styles.progressBarFill, { width: `${Math.min(100, ((suddenDeathBlockProgressM ?? 0) / 100) * 100)}%` }]} />
-          </View>
+      {/* Card Morte Súbita — a distância de cada bloco vem sempre de
+          constants/runProgram.js (não fixa aqui), para se a alterares nesse
+          ficheiro (distKm) a barra e os valores mostrados ajustarem-se
+          sozinhos. O progresso em si (suddenDeathBlockProgressM) já vem
+          calculado corretamente por bloco a partir do index.js. */}
+      {exerciseType === 'challenge_morte_subita' && (() => {
+        const currentBlockTargetM = Math.round((SUDDEN_DEATH_BLOCKS[suddenDeathBlock - 1]?.distKm ?? 0.1) * 1000);
+        return (
+          <View style={styles.rockportProgressCard}>
+            <View style={styles.rockportHeaderRow}>
+              <Text style={styles.rockportLabel}>BLOCO ATUAL: {suddenDeathBlock} / {SUDDEN_DEATH_BLOCKS.length}</Text>
+              <Text style={styles.rockportValue}>{suddenDeathBlockProgressM ?? 0} / {currentBlockTargetM} m</Text>
+            </View>
+            <View style={styles.progressBarBackground}>
+              <View style={[styles.progressBarFill, { width: `${Math.min(100, ((suddenDeathBlockProgressM ?? 0) / currentBlockTargetM) * 100)}%` }]} />
+            </View>
           <View style={styles.recordHighlightBox}>
             <Text style={styles.recordTitle}>CONTAGEM DECRESCENTE DO BLOCO</Text>
             <Text
@@ -115,7 +119,8 @@ export default function ActiveExerciseScreen({
             </Text>
           </View>
         </View>
-      )}
+        );
+      })()}
 
       {exerciseType === 'run_program' && timelinePhases.length > 0 && (
         <View style={styles.timelineWrapper}>
