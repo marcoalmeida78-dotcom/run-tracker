@@ -4,7 +4,7 @@ import { WebView } from 'react-native-webview';
 import { getLeafletMapHtml } from '../constants/mapHtml';
 import { LIME_GREEN } from '../constants/mapColors';
 import { SUDDEN_DEATH_BLOCKS } from '../constants/runProgram';
-import { calculateCalories, calculatePace, formatHMS } from '../utils/calculations';
+import { calculateCalories, formatHMS } from '../utils/calculations';
 
 export default function ActiveExerciseScreen({
   colors,
@@ -22,6 +22,7 @@ export default function ActiveExerciseScreen({
   phaseTimeLeft,
   seconds,
   speed,
+  currentPace,
   profile,
   activeConfig,
   isPaused,
@@ -156,7 +157,7 @@ export default function ActiveExerciseScreen({
       <View style={styles.bentoGridActive}>
         <View style={styles.bentoCardActive}>
           <Text style={styles.metricLabel}>RITMO (MIN/KM)</Text>
-          <Text style={styles.metricValue}>{calculatePace(distance, seconds) ?? '--'}</Text>
+          <Text style={styles.metricValue}>{currentPace ?? '--'}</Text>
         </View>
         <View style={styles.bentoCardActive}>
           <Text style={styles.metricLabel}>DISTÂNCIA</Text>

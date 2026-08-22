@@ -92,6 +92,9 @@ export default function App() {
   const [seconds, setSeconds] = useState(0);
   const [distance, setDistance] = useState(0);
   const [speed, setSpeed] = useState(0);
+  // Ritmo mostrado ao vivo durante o exercício — ver explicação completa e o
+  // cálculo junto a paceWindowRef, dentro de tickExercise.
+  const [currentPace, setCurrentPace] = useState(null);
 
   const [isMapReady, setIsMapReady] = useState(false);
 
@@ -144,6 +147,8 @@ export default function App() {
   const pauseStartTimeRef = useRef(null);
   const totalPausedTimeRef = useRef(0);
   const lastMilhaNoticeStep = useRef(0);
+  // Janela deslizante para o ritmo "ao vivo" — ver tickExercise.
+  const paceWindowRef = useRef([]);
 
   // --- NOVO: Ref de segurança (Ponto 3) ---
   const lastMovementTimeRef = useRef(Date.now());
@@ -618,6 +623,32 @@ export default function App() {
       setSeconds(currentSec);
       secondsRef.current = currentSec;
 
+      // --- Ritmo "ao vivo" (janela deslizante dos últimos 30s) ---
+      // calculatePace(distance, seconds) sozinho dá a média desde o INÍCIO
+      // da sessão inteira — matematicamente correto, mas muito lento a
+      // refletir uma mudança de esforço recente (bug relatado: "ia a andar,
+      // ritmo 7.61; comecei a correr, o valor praticamente não se altera").
+      // Isto acontece porque, quanto mais tempo/distância já foram
+      // acumulados, menos peso tem qualquer minuto novo na média total. Por
+      // isso guarda-se aqui um histórico de amostras (segundo, distância) e
+      // calcula-se o ritmo só a partir da distância/tempo dos últimos 30s —
+      // responde a uma mudança de ritmo em segundos, não em minutos. Só usa
+      // esta janela depois de ter pelo menos 10s de amostras (evita valores
+      // instáveis logo no arranque); antes disso, e sempre que a janela não
+      // dê um valor válido (ex: sessão parada), cai em segurança para a
+      // média desde o início, tal como antes.
+      const PACE_WINDOW_SEC = 10;
+      paceWindowRef.current.push({ t: currentSec, d: currentDist });
+      while (paceWindowRef.current.length > 1 && currentSec - paceWindowRef.current[0].t > PACE_WINDOW_SEC) {
+        paceWindowRef.current.shift();
+      }
+      const windowStart = paceWindowRef.current[0];
+      let recentPace = null;
+      if (windowStart && currentSec - windowStart.t >= 10) {
+        recentPace = calculatePace(currentDist - windowStart.d, currentSec - windowStart.t);
+      }
+      setCurrentPace(recentPace ?? calculatePace(currentDist, currentSec));
+
       if (activeConfigRef.current?.phases && activeConfigRef.current.phases.length > 0) {
         updateTimelineProgress(currentSec, activeConfigRef.current.phases);
       }
@@ -696,10 +727,12 @@ export default function App() {
     setSeconds(0);
     setDistance(0);
     setSpeed(0);
+    setCurrentPace(null);
     setShowEsquinaModal(false);
     esquinaTargetMultiplierRef.current = 1;
     hasGoneBackgroundRef.current = false;
     lastMilhaNoticeStep.current = 0;
+    paceWindowRef.current = [];
     lastMovementTimeRef.current = Date.now();
     safetyPauseTriggeredRef.current = false;
 
@@ -1014,9 +1047,11 @@ export default function App() {
     // (bug corrigido: o registo ficava sempre com startTime nulo e título vazio).
     const capturedStartTime = startTimeRef.current;
     const capturedTitle = exerciseTitleRef.current;
-    // Ver nota equivalente em autoFinishExercise.
-    const capturedRoute = routeCoordsRef.current;
-    currentDist = getFinalDistanceKm(capturedRoute, currentDist);
+    // Ao contrário de autoFinishExercise, aqui NÃO se recalcula a distância
+    // a partir do trajeto (getFinalDistanceKm) — ver a nota longa em
+    // autoFinishExercise sobre porquê: o valor "quantos metros percorreste"
+    // mostrado nesta falha tem de ser sempre o mesmo que foi usado para
+    // decidir, ao vivo, que o bloco não foi cumprido a tempo.
     stopAndCleanupExercise();
     Vibration.vibrate([400, 200, 400]);
     playAudio(`Tempo esgotado no bloco ${configBlock.block}. Desafio Morte Súbita não concluído.`);
@@ -1070,13 +1105,25 @@ export default function App() {
     const capturedStartTime = startTimeRef.current;
     // Captura o trajeto GPS completo ANTES de stopAndCleanupExercise() o
     // esvaziar, para poder recalcular a distância final a partir dele (ver
-    // getFinalDistanceKm em utils/calculations.js). Reatribuir finalDist aqui,
-    // uma única vez, propaga o valor corrigido para todos os ramos abaixo
-    // (Morte Súbita, 5km/30min, genérico, e também para o fluxo de
-    // batimentos cardíacos em finalizePendingTest, que recebe este mesmo
-    // valor através de pendingFinishRef.current).
+    // getFinalDistanceKm em utils/calculations.js).
+    //
+    // IMPORTANTE: nunca aplicar esta recalculação a desafios cujo
+    // sucesso/falha já foi decidido EM TEMPO REAL a partir da distância ao
+    // vivo (Morte Súbita, 5km/30min) — bug real reportado: o utilizador
+    // completou o desafio 5km/30min com sucesso (a app terminou sozinha ao
+    // atingir os 5km), mas a recalculação a seguir baixou a distância para
+    // 4.8x km, e o registo ficava guardado como falhado — completamente
+    // contraditório com o que acabara de acontecer ao vivo. Para estes dois
+    // desafios, o valor que decide sucesso/falha TEM de ser sempre o mesmo
+    // que fica gravado — por isso mantêm-se ambos no valor ao vivo (já bem
+    // filtrado em tempo real pelos 3 filtros — precisão, movimento mínimo,
+    // velocidade implausível). Para todos os outros tipos (sem sucesso/falha
+    // dependente da distância), a recalculação só torna o número final mais
+    // preciso, sem contradizer nada que já tenha sido decidido ao vivo.
     const capturedRoute = routeCoordsRef.current;
-    finalDist = getFinalDistanceKm(capturedRoute, finalDist);
+    if (type !== 'challenge_morte_subita' && type !== 'challenge_5k30') {
+      finalDist = getFinalDistanceKm(capturedRoute, finalDist);
+    }
     stopAndCleanupExercise();
     Vibration.vibrate([500, 300, 500]);
 
@@ -1584,6 +1631,7 @@ export default function App() {
           phaseTimeLeft={phaseTimeLeft}
           seconds={seconds}
           speed={speed}
+          currentPace={currentPace}
           profile={profile}
           activeConfig={activeConfig}
           isPaused={isPaused}
