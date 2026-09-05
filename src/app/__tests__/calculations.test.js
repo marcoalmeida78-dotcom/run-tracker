@@ -14,6 +14,7 @@ import {
   calculate15MilesVo2Max,
   calculate1MileRunVo2Max,
   calculateRouteDistanceKm,
+  evaluateGpsMovement,
   getBestTimeForTitle,
   getFinalDistanceKm,
   getSuddenDeathProgress,
@@ -172,6 +173,75 @@ describe('isSegmentSpeedPlausible', () => {
     expect(isSegmentSpeedPlausible(0.05, null)).toBe(true);
     expect(isSegmentSpeedPlausible(0.05, 0)).toBe(true);
     expect(isSegmentSpeedPlausible(0.05, -1)).toBe(true);
+  });
+});
+
+describe('evaluateGpsMovement (âncora com acumulação)', () => {
+  // Esta é a correção do bug real relatado: uma caminhada livre de mais de
+  // 1km ficou registada com ~350m. A causa: a versão anterior comparava
+  // sempre com a leitura imediatamente anterior e avançava essa referência
+  // a cada leitura — mesmo quando o movimento ficava abaixo do piso. A um
+  // ritmo de caminhada normal (~1.2 m/s, abaixo do piso de 1.5m), isto
+  // perdia praticamente 100% da distância, leitura atrás de leitura.
+  const degPerMeterLat = 1 / 111320;
+  const lat = 38.7223;
+  const lon = -9.1393;
+  const metersToPoint = (m) => ({ latitude: lat + m * degPerMeterLat, longitude: lon });
+
+  it('não avança (não conta) um único passo de caminhada lenta, abaixo do piso', () => {
+    const anchor = metersToPoint(0);
+    const point = metersToPoint(1.2); // abaixo do piso de 1.5m
+    const result = evaluateGpsMovement(anchor, 0, point, 1000); // timestamps em ms
+    expect(result.shouldCommit).toBe(false);
+  });
+
+  it('CRÍTICO: ao contrário da versão anterior, o movimento lento soma-se ao longo de várias leituras contra a MESMA âncora, até ultrapassar o piso', () => {
+    const anchor = metersToPoint(0);
+    // 1 passo (1.2m) não basta...
+    expect(evaluateGpsMovement(anchor, 0, metersToPoint(1.2), 1000).shouldCommit).toBe(false);
+    // ...mas comparado com a MESMA âncora, 2 passos (2.4m) já ultrapassa o piso.
+    const twoSteps = evaluateGpsMovement(anchor, 0, metersToPoint(2.4), 2000);
+    expect(twoSteps.shouldCommit).toBe(true);
+    expect(twoSteps.distanceKm).toBeCloseTo(0.0024, 4);
+  });
+
+  it('simula uma caminhada real de 1000m a ritmo lento (1.2 m/s) e confirma que quase toda a distância é contabilizada', () => {
+    let anchor = metersToPoint(0);
+    let anchorT = 0;
+    let total = 0;
+    const metersPerTick = 1.2;
+    const ticks = Math.round(1000 / metersPerTick);
+
+    for (let i = 1; i <= ticks; i++) {
+      const point = metersToPoint(i * metersPerTick);
+      const tMs = i * 1000; // timestamps em ms, 1 leitura por segundo
+      const result = evaluateGpsMovement(anchor, anchorT, point, tMs);
+      if (result.shouldCommit) {
+        total += result.distanceKm;
+        anchor = point;
+        anchorT = tMs;
+      }
+      // se não ultrapassar o piso, a âncora fica-se — não avança.
+    }
+
+    // Com o bug antigo isto dava ~0m. Com a correção, fica muito próximo do
+    // real (perde-se quando muito uma fração do último troço por ainda não
+    // ter ultrapassado o piso quando a simulação termina).
+    expect(total * 1000).toBeGreaterThan(990);
+  });
+
+  it('um salto de GPS implausível não avança a âncora nem conta distância', () => {
+    const anchor = metersToPoint(0);
+    const impossibleJump = metersToPoint(50); // 50m num único segundo = 180km/h
+    const result = evaluateGpsMovement(anchor, 0, impossibleJump, 1000);
+    expect(result.plausible).toBe(false);
+    expect(result.shouldCommit).toBe(false);
+  });
+
+  it('não rebenta com timestamps nulos/indefinidos (trata como sem informação de tempo)', () => {
+    const anchor = metersToPoint(0);
+    const point = metersToPoint(5);
+    expect(() => evaluateGpsMovement(anchor, null, point, null)).not.toThrow();
   });
 });
 

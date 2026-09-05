@@ -34,14 +34,11 @@ import {
   calculate1MileRunVo2Max,
   calculatePace,
   calculateRockportVo2Max,
-  calculateVincenty,
+  evaluateGpsMovement,
   generateTimeline,
   getBestTimeForTitle,
-  getFinalDistanceKm,
   getSuddenDeathProgress,
-  GPS_MIN_MOVEMENT_KM,
   isGpsAccuracyAcceptable,
-  isSegmentSpeedPlausible,
 } from './utils/calculations';
 import {
   calculateCooperVo2Max,
@@ -235,8 +232,7 @@ export default function App() {
     const capturedStartTime = startTimeRef.current;
     const capturedTitle = exerciseTitleRef.current;
     const capturedSec = secondsRef.current;
-    const capturedRoute = routeCoordsRef.current;
-    const capturedDist = getFinalDistanceKm(capturedRoute, distanceRef.current);
+    const capturedDist = distanceRef.current;
     const capturedSpeed = speedRef.current;
     stopAndCleanupExercise();
     Vibration.vibrate([400, 200, 400]);
@@ -637,7 +633,7 @@ export default function App() {
       // instáveis logo no arranque); antes disso, e sempre que a janela não
       // dê um valor válido (ex: sessão parada), cai em segurança para a
       // média desde o início, tal como antes.
-      const PACE_WINDOW_SEC = 10;
+      const PACE_WINDOW_SEC = 30;
       paceWindowRef.current.push({ t: currentSec, d: currentDist });
       while (paceWindowRef.current.length > 1 && currentSec - paceWindowRef.current[0].t > PACE_WINDOW_SEC) {
         paceWindowRef.current.shift();
@@ -796,28 +792,24 @@ export default function App() {
       // --- Filtro 1: rejeição por precisão ---
       // Leituras pouco fiáveis (accuracy > 25m) são ignoradas por completo:
       // nem contam distância, nem passam a ser a posição de referência da
-      // leitura seguinte. Ver isGpsAccuracyAcceptable em utils/calculations.js
-      // (e a nota lá sobre a versão anterior deste filtro, que causou uma
-      // regressão grave).
+      // leitura seguinte. Ver isGpsAccuracyAcceptable em utils/calculations.js.
       if (!isGpsAccuracyAcceptable(accuracy)) {
         return;
       }
 
       let newDist = distanceRef.current;
       if (lastLocation.current) {
-        const added = calculateVincenty(lastLocation.current.latitude, lastLocation.current.longitude, latitude, longitude);
+        // Ver evaluateGpsMovement em utils/calculations.js: a "âncora"
+        // (lastLocation.current) só avança quando o movimento acumulado
+        // desde ela ultrapassa o piso mínimo — ao ritmo de caminhada, uma
+        // única leitura fica muitas vezes abaixo do piso, e precisa de se
+        // poder somar com as leituras seguintes em vez de ser descartada a
+        // cada segundo (bug real corrigido: uma caminhada de mais de 1km
+        // ficava registada com ~350m).
+        const evaluation = evaluateGpsMovement(lastLocation.current, lastLocationTimestampRef.current, { latitude, longitude }, loc.timestamp);
 
-        // --- Filtro 3: velocidade implausível neste segmento específico ---
-        // Não pausa o treino (ao contrário do filtro de velocidade acima) —
-        // só ignora este salto pontual de GPS.
-        const deltaSeconds = lastLocationTimestampRef.current != null && loc.timestamp
-          ? (loc.timestamp - lastLocationTimestampRef.current) / 1000
-          : null;
-        const plausible = isSegmentSpeedPlausible(added, deltaSeconds);
-
-        // --- Filtro 2: movimento mínimo por leitura (piso fixo, pequeno) ---
-        if (plausible && added > GPS_MIN_MOVEMENT_KM) {
-          newDist = distanceRef.current + added;
+        if (evaluation.plausible && evaluation.shouldCommit) {
+          newDist = distanceRef.current + evaluation.distanceKm;
           setDistance(newDist);
           distanceRef.current = newDist;
           lastMovementTimeRef.current = Date.now(); // Atualiza tempo de último movimento
@@ -839,10 +831,14 @@ export default function App() {
           }
         }
 
-        // Um salto implausível não deve servir de base à leitura seguinte
-        // (senão a leitura seguinte "salta de volta" e também é rejeitada) —
-        // fica-se pela última posição de confiança até uma leitura plausível.
-        if (!plausible) {
+        // Só avança a âncora quando o movimento é plausível E ultrapassa o
+        // piso (ou seja, quando foi mesmo contabilizado acima) — um salto
+        // implausível fica ignorado por completo (a âncora não avança, para
+        // a leitura seguinte não "saltar de volta" e ser também rejeitada);
+        // um movimento real mas ainda abaixo do piso também não avança a
+        // âncora, precisamente para se poder ir somando com a leitura
+        // seguinte, em vez de reiniciar a comparação a cada segundo.
+        if (!evaluation.shouldCommit) {
           const newRoutePoint = { latitude, longitude };
           currentCoordRef.current = newRoutePoint;
           pushMapUpdate();
@@ -1047,11 +1043,6 @@ export default function App() {
     // (bug corrigido: o registo ficava sempre com startTime nulo e título vazio).
     const capturedStartTime = startTimeRef.current;
     const capturedTitle = exerciseTitleRef.current;
-    // Ao contrário de autoFinishExercise, aqui NÃO se recalcula a distância
-    // a partir do trajeto (getFinalDistanceKm) — ver a nota longa em
-    // autoFinishExercise sobre porquê: o valor "quantos metros percorreste"
-    // mostrado nesta falha tem de ser sempre o mesmo que foi usado para
-    // decidir, ao vivo, que o bloco não foi cumprido a tempo.
     stopAndCleanupExercise();
     Vibration.vibrate([400, 200, 400]);
     playAudio(`Tempo esgotado no bloco ${configBlock.block}. Desafio Morte Súbita não concluído.`);
@@ -1103,27 +1094,14 @@ export default function App() {
     isFinishingRef.current = true;
     // Captura ANTES de limpar — ver nota em handleSuddenDeathFailure.
     const capturedStartTime = startTimeRef.current;
-    // Captura o trajeto GPS completo ANTES de stopAndCleanupExercise() o
-    // esvaziar, para poder recalcular a distância final a partir dele (ver
-    // getFinalDistanceKm em utils/calculations.js).
-    //
-    // IMPORTANTE: nunca aplicar esta recalculação a desafios cujo
-    // sucesso/falha já foi decidido EM TEMPO REAL a partir da distância ao
-    // vivo (Morte Súbita, 5km/30min) — bug real reportado: o utilizador
-    // completou o desafio 5km/30min com sucesso (a app terminou sozinha ao
-    // atingir os 5km), mas a recalculação a seguir baixou a distância para
-    // 4.8x km, e o registo ficava guardado como falhado — completamente
-    // contraditório com o que acabara de acontecer ao vivo. Para estes dois
-    // desafios, o valor que decide sucesso/falha TEM de ser sempre o mesmo
-    // que fica gravado — por isso mantêm-se ambos no valor ao vivo (já bem
-    // filtrado em tempo real pelos 3 filtros — precisão, movimento mínimo,
-    // velocidade implausível). Para todos os outros tipos (sem sucesso/falha
-    // dependente da distância), a recalculação só torna o número final mais
-    // preciso, sem contradizer nada que já tenha sido decidido ao vivo.
-    const capturedRoute = routeCoordsRef.current;
-    if (type !== 'challenge_morte_subita' && type !== 'challenge_5k30') {
-      finalDist = getFinalDistanceKm(capturedRoute, finalDist);
-    }
+    // NOTA: já não se recalcula a distância final a partir do trajeto GPS
+    // (Douglas-Peucker) — foi tentado e revertido depois de duas regressões
+    // sérias seguidas nesta zona do código (ver utils/calculations.js,
+    // getFinalDistanceKm/simplifyRouteDouglasPeucker — funções mantidas e
+    // testadas, mas já não usadas aqui). A distância gravada é sempre a
+    // acumulada ao vivo (já filtrada em tempo real — precisão, movimento
+    // mínimo com acumulação, velocidade implausível — ver
+    // evaluateGpsMovement), igual para todos os tipos de exercício.
     stopAndCleanupExercise();
     Vibration.vibrate([500, 300, 500]);
 

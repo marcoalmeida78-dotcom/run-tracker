@@ -133,6 +133,32 @@ export const isSegmentSpeedPlausible = (distanceKm, deltaSeconds) => {
   return impliedKmH <= GPS_MAX_PLAUSIBLE_SEGMENT_SPEED_KMH;
 };
 
+// --- DECISÃO DE MOVIMENTO GPS (piso COM acumulação) ---
+// CORREÇÃO IMPORTANTE (2ª iteração deste filtro — a primeira ainda tinha um
+// bug sério): a versão anterior comparava sempre a nova leitura com a
+// IMEDIATAMENTE anterior, e avançava essa referência a cada leitura, mesmo
+// quando o movimento ficava abaixo do piso (2). Isso significa que, a um
+// ritmo de caminhada normal (ex: 1.2 m/s, abaixo do piso de 1.5m), CADA
+// leitura ficava sempre abaixo do piso, e como a referência avançava na
+// mesma, esse pequeno movimento nunca tinha oportunidade de se ir somando —
+// era apagado, leitura atrás de leitura, chegando a perder praticamente
+// 100% da distância de uma caminhada lenta (bug real relatado: mais de 1km
+// percorrido ficou registado como ~350m).
+//
+// A correção: a referência (o "ponto-âncora") só avança quando o movimento
+// acumulado desde ela ultrapassa o piso. Até lá, cada nova leitura é
+// comparada com a MESMA âncora — dando ao movimento lento espaço para se ir
+// juntando ao longo de várias leituras, em vez de ser reiniciado a cada
+// segundo. Só quando o total ultrapassa o piso é que esse valor é somado à
+// distância e a âncora avança para a leitura atual.
+export const evaluateGpsMovement = (anchor, anchorTimestamp, point, pointTimestamp) => {
+  const distanceKm = calculateVincenty(anchor.latitude, anchor.longitude, point.latitude, point.longitude);
+  const deltaSeconds = anchorTimestamp != null && pointTimestamp != null ? (pointTimestamp - anchorTimestamp) / 1000 : null;
+  const plausible = isSegmentSpeedPlausible(distanceKm, deltaSeconds);
+  const shouldCommit = plausible && distanceKm > GPS_MIN_MOVEMENT_KM;
+  return { distanceKm, plausible, shouldCommit };
+};
+
 // --- SUAVIZAÇÃO DOUGLAS-PEUCKER (aplicada no fim da sessão) ---
 // Os filtros em tempo real acima reduzem bastante o ruído, mas ainda pode
 // sobrar algum zigue-zague na rota gravada. No fim da sessão, este algoritmo
