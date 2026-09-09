@@ -35,6 +35,11 @@ export default function AppModals({
   showSuddenDeathResultModal,
   suddenDeathResultData,
   onCloseSuddenDeathResult,
+
+  // --- NOVO: Explicação do desafio antes de começar (ponto 1 do pedido) ---
+  pendingChallengeInfo,
+  onConfirmChallengeStart,
+  onCancelChallengeStart,
 }) {
   return (
     <>
@@ -210,6 +215,35 @@ export default function AppModals({
                 </TouchableOpacity>
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* NOVO (Ponto 1): explicação e regras do desafio ANTES de começar —
+          só para desafios de caminhada/corrida (ver constants/challengeInfo.js
+          e requestStartExercise em index.js). "Corrida livre" e "Caminhada
+          livre" não têm regras, por isso nunca mostram este modal — arrancam
+          logo, como antes. O exercício só arranca de facto (startExerciseSession)
+          se o utilizador escolher "SIM, COMEÇAR"; "CANCELAR" fecha sem nada
+          ter começado (nenhum GPS foi pedido nem timer arrancado até aqui). */}
+      <Modal visible={!!pendingChallengeInfo} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.esquinaCard}>
+            {pendingChallengeInfo && (
+              <>
+                <Text style={styles.esquinaTitle}>{pendingChallengeInfo.title}</Text>
+                <Text style={styles.esquinaText}>{pendingChallengeInfo.description}</Text>
+                <Text style={[styles.esquinaText, { textAlign: 'left' }]}>
+                  {pendingChallengeInfo.rules.map((rule) => `• ${rule}`).join('\n')}
+                </Text>
+              </>
+            )}
+            <TouchableOpacity style={styles.esquinaYesBtn} onPress={onConfirmChallengeStart}>
+              <Text style={styles.esquinaYesBtnText}>SIM, COMEÇAR ➔</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.esquinaNoBtn} onPress={onCancelChallengeStart}>
+              <Text style={styles.esquinaNoBtnText}>CANCELAR</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

@@ -39,7 +39,8 @@
         "android.permission.health.WRITE_ACTIVE_CALORIES_BURNED",
         "android.permission.health.WRITE_TOTAL_CALORIES_BURNED",
         "android.permission.health.WRITE_DISTANCE",
-        "android.permission.health.WRITE_VO2_MAX"
+        "android.permission.health.WRITE_VO2_MAX",
+        "android.permission.health.READ_WEIGHT"
       ]
     },
     "plugins": [

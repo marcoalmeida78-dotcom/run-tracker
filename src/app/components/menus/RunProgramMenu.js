@@ -53,7 +53,7 @@ export default function RunProgramMenu({
                   })}
                 </View>
               </View>
-              <Text style={styles.levelChevron}>{isOpen ? '▲ FECHAR' : '▼'}</Text>
+              <Text style={[styles.levelChevron, isCurrentLevel && styles.levelChevronActive]}>{isOpen ? '▲ FECHAR' : '▼'}</Text>
             </TouchableOpacity>
 
             {isOpen && (

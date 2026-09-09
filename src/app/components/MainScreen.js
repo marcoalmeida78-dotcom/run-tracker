@@ -1,5 +1,6 @@
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { RUN_PROGRAM_LEVELS } from '../constants/runProgram';
+import { APP_VERSION } from '../constants/appVersion';
 import ChallengesMenu from './menus/ChallengesMenu';
 import HistoryMenu from './menus/HistoryMenu';
 import MotivationalQuote from './MotivationalQuote';
@@ -219,6 +220,10 @@ export default function MainScreen({
         </View>
         <Text style={styles.batteryCountText}>{currentSessionIndex} / 75 sessões concluídas</Text>
       </TouchableOpacity>
+
+      {/* Ponto 5: versão interna da app, avança 0.1 a cada atualização
+          entregue a partir de hoje (ver constants/appVersion.js). */}
+      <Text style={styles.appVersionFooterText}>Versão {APP_VERSION}</Text>
     </ScrollView>
   );
 }

@@ -33,6 +33,7 @@ export default function ActiveExerciseScreen({
   noSignalAlert,
   bestTimeSec,
   bestCooperClassification,
+  onRecenterMap,
 }) {
   // O traço/bola do mapa é sempre verde-lima, fixo — não segue o esquema de
   // cores da app (pedido explícito, para se destacar sempre sobre o mapa).
@@ -84,6 +85,14 @@ export default function ActiveExerciseScreen({
           scrollEnabled={false}
           onLoadEnd={onMapLoadEnd}
         />
+        {/* Ponto 3: o mapa deixou de recentrar sozinho a cada atualização de
+            GPS (ver constants/mapHtml.js), para o utilizador poder fazer
+            zoom/pan livremente durante o exercício. Este botão chama
+            recenterMap() dentro do WebView para repor a vista sobre a
+            posição atual, sem alterar o zoom escolhido. */}
+        <TouchableOpacity style={styles.mapRecenterBtn} onPress={onRecenterMap}>
+          <Text style={styles.mapRecenterBtnText}>📍</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Card Morte Súbita — a distância de cada bloco vem sempre de

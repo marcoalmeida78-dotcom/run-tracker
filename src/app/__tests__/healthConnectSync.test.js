@@ -17,7 +17,7 @@ jest.mock('@react-native-async-storage/async-storage', () => {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import * as hc from 'react-native-health-connect';
-import { syncExerciseRecordToHealthConnect } from '../utils/healthConnectSync';
+import { syncExerciseRecordToHealthConnect, readLatestWeightFromHealthConnect } from '../utils/healthConnectSync';
 
 describe('syncExerciseRecordToHealthConnect', () => {
   const baseRecord = {
@@ -80,5 +80,68 @@ describe('syncExerciseRecordToHealthConnect', () => {
   it('não sincroniza registos sem startTime/endTime válidos', async () => {
     await syncExerciseRecordToHealthConnect({ ...baseRecord, startTime: null });
     expect(hc.insertRecords).not.toHaveBeenCalled();
+  });
+});
+
+// Ponto 2 do pedido: ler o peso mais recente ao Health Connect e devolvê-lo
+// para o index.js poder atualizar o perfil automaticamente ao iniciar a app.
+describe('readLatestWeightFromHealthConnect', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    Platform.OS = 'android';
+    hc.getGrantedPermissions.mockResolvedValue([{ recordType: 'Weight', accessType: 'read' }]);
+  });
+
+  it('devolve null fora do Android, sem sequer chamar a biblioteca', async () => {
+    Platform.OS = 'ios';
+    const result = await readLatestWeightFromHealthConnect();
+    expect(result).toBeNull();
+    expect(hc.initialize).not.toHaveBeenCalled();
+  });
+
+  it('pede a permissão de leitura se ainda não a tiver', async () => {
+    hc.getGrantedPermissions.mockResolvedValue([]);
+    hc.requestPermission.mockResolvedValue([{ recordType: 'Weight', accessType: 'read' }]);
+    hc.readRecords.mockResolvedValue({ records: [{ time: '2026-08-01T08:00:00.000Z', weight: { inKilograms: 78.4 } }] });
+
+    const result = await readLatestWeightFromHealthConnect();
+
+    expect(hc.requestPermission).toHaveBeenCalledWith([{ accessType: 'read', recordType: 'Weight' }]);
+    expect(result).toBe(78.4);
+  });
+
+  it('devolve null se a permissão de leitura for recusada', async () => {
+    hc.getGrantedPermissions.mockResolvedValue([]);
+    hc.requestPermission.mockResolvedValue([]);
+
+    const result = await readLatestWeightFromHealthConnect();
+
+    expect(result).toBeNull();
+    expect(hc.readRecords).not.toHaveBeenCalled();
+  });
+
+  it('devolve o registo de peso mais recente, mesmo que não venha ordenado', async () => {
+    hc.readRecords.mockResolvedValue({
+      records: [
+        { time: '2026-07-01T08:00:00.000Z', weight: { inKilograms: 80.0 } },
+        { time: '2026-08-15T08:00:00.000Z', weight: { inKilograms: 77.2 } },
+        { time: '2026-07-20T08:00:00.000Z', weight: { inKilograms: 79.1 } },
+      ],
+    });
+
+    const result = await readLatestWeightFromHealthConnect();
+
+    expect(result).toBe(77.2);
+  });
+
+  it('devolve null se não houver nenhum registo de peso', async () => {
+    hc.readRecords.mockResolvedValue({ records: [] });
+    const result = await readLatestWeightFromHealthConnect();
+    expect(result).toBeNull();
+  });
+
+  it('nunca lança erro, mesmo que a biblioteca rebente', async () => {
+    hc.readRecords.mockImplementation(() => { throw new Error('falha inesperada'); });
+    await expect(readLatestWeightFromHealthConnect()).resolves.toBeNull();
   });
 });

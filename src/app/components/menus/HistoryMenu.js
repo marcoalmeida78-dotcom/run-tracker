@@ -41,6 +41,12 @@ export default function HistoryMenu({ styles, onClose, history, onDeleteHistoryI
             )}
 
             <Text style={styles.historySub}>Distância: {item.distanceKm} km | Tempo: {formatHMS(item.timeSec)}</Text>
+            {/* Ponto 4: campo "pace" já era gravado no histórico mas nunca
+                mostrado — média da sessão toda, por isso a etiqueta "Ritmo
+                sessão" (para não se confundir com o ritmo "ao vivo" mostrado
+                durante o exercício, que é uma janela deslizante — ver
+                secção 5.4 do documento técnico). */}
+            <Text style={styles.historySub}>Ritmo sessão: {item.pace ?? '—'} min/km</Text>
             <Text style={styles.historySub}>Calorias: {item.calories ?? '—'} kcal</Text>
           </View>
         ))

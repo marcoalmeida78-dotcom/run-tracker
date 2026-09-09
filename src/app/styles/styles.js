@@ -15,6 +15,24 @@ export const getStyles = (colors) => StyleSheet.create({
   motivationalQuoteText: { fontSize: 30, fontWeight: '900', color: '#ffffff', textAlign: 'center', marginBottom: 24, marginTop: 8, letterSpacing: -0.5, lineHeight: 34, textTransform: 'uppercase' },
   mapContainer: { height: 220, borderRadius: 16, overflow: 'hidden', marginBottom: 14, borderWidth: 1, borderColor: colors.COLOR_DIVIDER, backgroundColor: '#061414' },
   map: { flex: 1, backgroundColor: 'transparent' },
+  // Ponto 3: botão para recentrar o mapa na posição do utilizador sem mexer
+  // no zoom escolhido (ver recenterMap em constants/mapHtml.js). Fica
+  // sobreposto no canto do mapa — mapContainer já tem overflow:hidden, mas
+  // isso só corta o WebView por baixo; este botão é irmão dele, por cima.
+  mapRecenterBtn: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
+  },
+  mapRecenterBtnText: { fontSize: 18 },
   bentoHeroCardPrimary: { backgroundColor: colors.COLOR_PRIMARY_BG, borderRadius: 20, padding: 18, marginBottom: 12, borderWidth: 1, borderColor: colors.COLOR_DIVIDER },
   cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   cardHeaderLeftRow: { flexDirection: 'row', alignItems: 'center' },
@@ -52,12 +70,16 @@ export const getStyles = (colors) => StyleSheet.create({
   // dos restantes só de relance, sem precisar de abrir o acordeão.
   levelCardComplete: { borderColor: colors.COLOR_LIME_ENERGY, borderWidth: 1.5 },
   levelHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 },
-  levelHeaderActive: { backgroundColor: colors.COLOR_DIVIDER },
+  // Cabeçalho do nível/sessão atual: verde-lima FIXO (não COLOR_LIME_ENERGY,
+  // que no tema "Vidro Branco" é branco) + texto a preto para contraste,
+  // pedido explícito do utilizador — ver também levelProgressDotDone abaixo.
+  levelHeaderActive: { backgroundColor: LIME_GREEN },
   levelTitleRow: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 },
   currentDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.COLOR_PRIMARY, marginRight: 6 },
   levelTitle: { fontWeight: '700', fontSize: 13, color: colors.COLOR_PRIMARY },
-  levelTitleActiveText: { fontWeight: '900' },
+  levelTitleActiveText: { fontWeight: '900', color: colors.COLOR_ACCENT_TEXT },
   levelChevron: { fontSize: 11, color: colors.COLOR_SECONDARY, fontWeight: '700' },
+  levelChevronActive: { color: colors.COLOR_ACCENT_TEXT },
   // --- Indicador de progresso do nível (visível com o acordeão fechado) ---
   // 3 pontos, um por sessão: preenchido = sessão concluída, apenas contornado
   // = por fazer. Dá para perceber ao correr o olho pelos 25 níveis se um
@@ -65,7 +87,11 @@ export const getStyles = (colors) => StyleSheet.create({
   // preenchidos), sem ter de abrir cada um.
   levelProgressRow: { flexDirection: 'row', alignItems: 'center', marginLeft: 8 },
   levelProgressDot: { width: 7, height: 7, borderRadius: 3.5, borderWidth: 1, borderColor: colors.COLOR_DIVIDER, marginLeft: 3 },
-  levelProgressDotDone: { backgroundColor: colors.COLOR_LIME_ENERGY, borderColor: colors.COLOR_LIME_ENERGY },
+  // Ponto 2 do pedido: estas bolas ficavam brancas no tema "Vidro Branco"
+  // porque seguiam colors.COLOR_LIME_ENERGY (que nesse tema é branco — ver
+  // constants/themes.js). Passam a usar o verde-lima FIXO (LIME_GREEN),
+  // igual ao do mapa/botão "Iniciar Corrida", independente do tema.
+  levelProgressDotDone: { backgroundColor: LIME_GREEN, borderColor: LIME_GREEN },
   levelProgressLabel: { fontSize: 10, fontWeight: '700', color: colors.COLOR_SECONDARY, marginLeft: 6 },
   levelProgressLabelDone: { color: colors.COLOR_LIME_ENERGY },
   levelDetailsContainer: { padding: 12, paddingTop: 0 },
@@ -113,6 +139,8 @@ export const getStyles = (colors) => StyleSheet.create({
   batteryFill: { height: '100%', backgroundColor: colors.COLOR_LIME_ENERGY, borderRadius: 4 },
   batteryTerminal: { width: 6, height: 14, marginLeft: 2, borderTopRightRadius: 3, borderBottomRightRadius: 3, backgroundColor: colors.COLOR_DIVIDER },
   batteryCountText: { marginTop: 8, textAlign: 'center', color: colors.COLOR_SECONDARY, fontWeight: '700', fontSize: 12 },
+  // Ponto 5: versão da app no fundo do ecrã inicial (ver constants/appVersion.js).
+  appVersionFooterText: { marginTop: 18, textAlign: 'center', color: colors.COLOR_SECONDARY, fontWeight: '700', fontSize: 10, letterSpacing: 1, opacity: 0.7 },
   activeBtnRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 },
   pauseBtn: { backgroundColor: colors.COLOR_PRIMARY_BG, borderRadius: 14, padding: 16, flex: 1, marginRight: 8, alignItems: 'center', borderWidth: 1, borderColor: colors.COLOR_DIVIDER },
   pauseBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 14, letterSpacing: 1 },

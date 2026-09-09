@@ -27,6 +27,12 @@ const WRITE_PERMISSIONS = [
   { accessType: 'write', recordType: 'Vo2Max' },
 ];
 
+// Permissão de LEITURA do peso — usada só por readLatestWeightFromHealthConnect
+// (ponto 2 do pedido: ler o peso ao Health Connect e atualizar o perfil ao
+// iniciar a app). Precisa também da entrada correspondente em app.json
+// (android.permissions: "android.permission.health.READ_WEIGHT").
+const WEIGHT_READ_PERMISSION = [{ accessType: 'read', recordType: 'Weight' }];
+
 // Carregado de forma preguiçosa (lazy) — em vez de import estático no topo do
 // ficheiro — porque este módulo agora é importado por index.js, que corre em
 // qualquer plataforma (incluindo o preview web); um import estático de uma
@@ -205,5 +211,71 @@ export const syncExerciseRecordToHealthConnect = async (record) => {
     // Nunca deixa a sincronização (uma funcionalidade extra) afetar o fluxo
     // principal da app — o treino já está gravado no histórico local.
     logEvent('HealthConnectSync', 'Erro ao sincronizar treino com o Health Connect', error);
+  }
+};
+
+/**
+ * Lê o registo de peso mais recente do Google Health Connect (ex: gravado
+ * pela balança Xiaomi através da app "Saúde & Metabolismo" — ver ponto 2 do
+ * pedido do utilizador). Chamado ao iniciar esta app, para atualizar
+ * automaticamente o campo "weight" do perfil sem o utilizador ter de o fazer
+ * à mão.
+ *
+ * Pede a permissão de LEITURA do peso na primeira vez (mostra o ecrã de
+ * permissões do Health Connect); se for recusada, ou não houver nenhum
+ * registo, devolve null e o chamador simplesmente não atualiza o perfil —
+ * nunca lança erro, para nunca poder interromper o arranque da app.
+ *
+ * @returns {Promise<number|null>} peso em kg (1 casa decimal) ou null.
+ */
+export const readLatestWeightFromHealthConnect = async () => {
+  try {
+    if (Platform.OS !== 'android') return null;
+
+    const hc = await loadHealthConnect();
+    if (!hc) return null;
+
+    const isInitialized = await hc.initialize();
+    if (!isInitialized) return null;
+
+    const granted = await hc.getGrantedPermissions();
+    const hasReadPerm = granted.some((g) => g.recordType === 'Weight' && g.accessType === 'read');
+    if (!hasReadPerm) {
+      const result = await hc.requestPermission(WEIGHT_READ_PERMISSION);
+      const nowGranted = (result || []).some((g) => g.recordType === 'Weight' && g.accessType === 'read');
+      if (!nowGranted) {
+        logEvent('HealthConnectSync', 'Permissão de leitura do peso recusada — perfil não atualizado.');
+        return null;
+      }
+    }
+
+    const now = new Date();
+    const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+    const { records } = await hc.readRecords('Weight', {
+      timeRangeFilter: {
+        operator: 'between',
+        startTime: oneYearAgo.toISOString(),
+        endTime: now.toISOString(),
+      },
+    });
+
+    if (!records || records.length === 0) return null;
+
+    // A biblioteca não garante que os registos vêm ordenados — escolhe
+    // explicitamente o mais recente por "time" (registo instantâneo, sem
+    // startTime/endTime, ao contrário dos registos de exercício).
+    const latest = records.reduce((latestSoFar, rec) => {
+      const recTime = new Date(rec.time).getTime();
+      const bestTime = new Date(latestSoFar.time).getTime();
+      return recTime > bestTime ? rec : latestSoFar;
+    }, records[0]);
+
+    const weightKg = latest?.weight?.inKilograms;
+    if (!weightKg || weightKg <= 0) return null;
+
+    return Math.round(weightKg * 10) / 10;
+  } catch (error) {
+    logEvent('HealthConnectSync', 'Erro ao ler o peso do Health Connect', error);
+    return null;
   }
 };

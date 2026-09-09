@@ -20,10 +20,12 @@ import {
 
 import { THEMES } from './constants/themes';
 import { RUN_PROGRAM_LEVELS, SUDDEN_DEATH_BLOCKS } from './constants/runProgram';
+import { CHALLENGE_INFO } from './constants/challengeInfo';
 import { LOCATION_TASK_NAME, setBackgroundLocationHandler } from './tasks/locationTask';
 import { getStyles } from './styles/styles';
 import {
   isHealthConnectSyncEnabled,
+  readLatestWeightFromHealthConnect,
   requestHealthConnectWritePermissions,
   setHealthConnectSyncEnabled,
   syncExerciseRecordToHealthConnect,
@@ -116,6 +118,11 @@ export default function App() {
   const [showEsquinaModal, setShowEsquinaModal] = useState(false);
   const esquinaTargetMultiplierRef = useRef(1);
 
+  // --- NOVO: Explicação do desafio antes de começar (Ponto 1) ---
+  // Guarda { type, title, config } enquanto o modal de regras está visível;
+  // null = nenhum desafio pendente de confirmação. Ver requestStartExercise.
+  const [pendingChallengeStart, setPendingChallengeStart] = useState(null);
+
   // --- NOVO: Modal de resultado do Cooper/Rockport (batimentos → VO2 Máx, FC Máx, zona) ---
   const [showTestResultModal, setShowTestResultModal] = useState(false);
   const [pendingTestTitle, setPendingTestTitle] = useState('');
@@ -194,6 +201,11 @@ export default function App() {
 
   useEffect(() => {
     loadAppData();
+    // Ponto 2: lê o peso ao Health Connect e atualiza o perfil ao iniciar a
+    // app — fire-and-forget (não bloqueia o arranque nem lança erro, ver
+    // syncWeightFromHealthConnect). Só tem efeito no Android, tal como o
+    // resto da integração com o Health Connect.
+    syncWeightFromHealthConnect();
 
     (async () => {
       try {
@@ -357,6 +369,26 @@ export default function App() {
     }
   };
 
+  // --- NOVO: Ler o peso ao Health Connect e atualizar o perfil (Ponto 2) ---
+  // Chamado uma vez no arranque da app (ver useEffect com loadAppData()).
+  // Fire-and-forget e nunca lança erro: se o Health Connect não estiver
+  // disponível, a permissão for recusada, ou não houver nenhum registo de
+  // peso, simplesmente não mexe no perfil — o utilizador continua a poder
+  // preenchê-lo à mão nas Definições como sempre. Usa um atualizador
+  // funcional (prev => ...) para nunca pisar alterações feitas ao perfil
+  // entretanto (ex: o próprio loadAppData a carregar o perfil guardado, que
+  // corre em paralelo).
+  const syncWeightFromHealthConnect = async () => {
+    const weightKg = await readLatestWeightFromHealthConnect();
+    if (weightKg == null) return;
+
+    setProfile((prev) => {
+      const updated = { ...prev, weight: String(weightKg) };
+      AsyncStorage.setItem('@user_profile', JSON.stringify(updated)).catch(() => {});
+      return updated;
+    });
+  };
+
   const changeFogOpacity = async (value) => {
     const clamped = Math.max(0, Math.min(1, value));
     setFogOpacity(clamped);
@@ -411,6 +443,16 @@ export default function App() {
   const clearMapRoute = () => {
     if (webviewRef.current) {
       webviewRef.current.injectJavaScript('clearRoute(); true;');
+    }
+  };
+
+  // Ponto 3: botão "recentrar" no ecrã do exercício ativo — chama a função
+  // recenterMap() definida dentro do HTML do mapa (ver constants/mapHtml.js),
+  // que centra a vista na posição atual SEM alterar o zoom escolhido pelo
+  // utilizador.
+  const recenterMap = () => {
+    if (webviewRef.current) {
+      webviewRef.current.injectJavaScript('recenterMap(); true;');
     }
   };
 
@@ -689,6 +731,32 @@ export default function App() {
       autoFinishExercise(exerciseTypeRef.current, exerciseTitleRef.current, secondsRef.current, currentDist, currentSpeed, activeConfigRef.current);
     }
   };
+
+  // --- NOVO: Explicação do desafio antes de começar (Ponto 1) ---
+  // Chamada pelos menus (WalksMenu/ChallengesMenu) em vez de
+  // startExerciseSession diretamente. Se o tipo tiver uma entrada em
+  // CHALLENGE_INFO (só desafios — "livre" não tem), mostra primeiro o modal
+  // com as regras e só arranca o exercício de facto se o utilizador
+  // confirmar; caso contrário (corrida/caminhada livre) arranca logo, tal
+  // como antes. Não pede nenhuma permissão nem toca no GPS antes da
+  // confirmação — isso só acontece dentro de startExerciseSession.
+  const requestStartExercise = (type, title, config = {}) => {
+    if (CHALLENGE_INFO[type]) {
+      setPendingChallengeStart({ type, title, config });
+      return;
+    }
+    startExerciseSession(type, title, config);
+  };
+
+  const confirmPendingChallengeStart = () => {
+    const pending = pendingChallengeStart;
+    setPendingChallengeStart(null);
+    if (pending) {
+      startExerciseSession(pending.type, pending.title, pending.config);
+    }
+  };
+
+  const cancelPendingChallengeStart = () => setPendingChallengeStart(null);
 
   const startExerciseSession = async (type, title, config = {}) => {
     // --- PONTO 5: Verificação preliminar de GPS e Rede ---
@@ -1590,6 +1658,9 @@ export default function App() {
         showSuddenDeathResultModal={showSuddenDeathResultModal}
         suddenDeathResultData={suddenDeathResultData}
         onCloseSuddenDeathResult={handleCloseSuddenDeathResult}
+        pendingChallengeInfo={pendingChallengeStart ? CHALLENGE_INFO[pendingChallengeStart.type] : null}
+        onConfirmChallengeStart={confirmPendingChallengeStart}
+        onCancelChallengeStart={cancelPendingChallengeStart}
       />
 
       {isExercising ? (
@@ -1620,6 +1691,7 @@ export default function App() {
           noSignalAlert={noSignalAlert}
           bestTimeSec={exerciseType !== 'run_program' ? getBestTimeForTitle(history, exerciseTitle) : null}
           bestCooperClassification={exerciseType === 'challenge_cooper' ? getBestCooperClassification(history, profile) : null}
+          onRecenterMap={recenterMap}
         />
       ) : (
         <MainScreen
@@ -1633,7 +1705,7 @@ export default function App() {
           activeLevelAccordion={activeLevelAccordion}
           onToggleLevelAccordion={toggleLevelAccordion}
           completedSessions={completedSessions}
-          onStartExercise={startExerciseSession}
+          onStartExercise={requestStartExercise}
           profile={profile}
           onSaveProfile={saveProfileData}
           onResetAllData={handleResetAllData}
