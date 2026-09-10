@@ -303,6 +303,42 @@ mecanismo — não há nenhuma recalculação a posteriori neste momento (ver
   `map.setView([lastCoords], map.getZoom())` — repõe a vista sobre a
   posição atual **sem** alterar o zoom que o utilizador tinha escolhido.
 
+### 5.6 Calorias — bug corrigido (09/2026)
+
+- **Bug encontrado pelo utilizador**: reparou que sessões com distâncias e
+  ritmos bem diferentes (ex: Nível 17 - Sessão 49, 4.41km a 7.03 min/km, vs.
+  Nível 17 - Sessão 50, 3.87km a 8.00 min/km) davam **exatamente as mesmas
+  calorias** no histórico. Confirmado e corrigido — não era imaginação.
+- **Causa**: `calculateCalories` (`utils/calculations.js`) escolhia entre
+  só DOIS valores fixos de MET (4.0 "caminhada" ou 8.5 "corrida", consoante
+  a velocidade média fosse ≤ ou > 7km/h) e depois calculava as calorias só
+  a partir do **tempo** — a distância só entrava indiretamente, para
+  escolher o "lado do degrau". Duas sessões com a mesma duração e do mesmo
+  lado do limiar davam sempre o mesmo resultado, por mais diferente que
+  fosse a distância real (prova concreta no histórico real do utilizador:
+  Nível 16 - Sessão 46, 3.74km, e Sessão 48, 4.37km, ambas com 30:00 exatos,
+  davam as duas 419 kcal — 0.63km de diferença, 0kcal de diferença).
+- **Correção**: o MET passou a ser calculado de forma **contínua** a partir
+  da velocidade real, usando as equações padrão do ACSM (American College
+  of Sports Medicine) para consumo de oxigénio — mantém-se o mesmo limiar
+  de 7km/h para escolher entre a equação de caminhada e a de corrida, mas
+  agora o MET varia sempre com a velocidade dentro de cada lado, por isso a
+  distância volta a refletir-se sempre no resultado. A velocidade usada no
+  cálculo é limitada a 24km/h, só para proteger contra picos de erro de GPS
+  a inflacionar as calorias (nunca afeta ritmos reais destes exercícios).
+- **Registos antigos**: a pedido do utilizador, foram recalculados (não só
+  os exercícios futuros). Isto foi feito com uma migração de arranque
+  único em `loadAppData()` (`index.js`): na primeira vez que a app abre com
+  esta versão, todo o `@user_history` guardado é recalculado com a nova
+  fórmula (usando o peso **atual** do perfil, por não existir um "peso
+  histórico" por sessão — a mesma aproximação que a fórmula antiga já
+  fazia) e a flag `@calories_formula_v2_migrated` fica gravada no
+  AsyncStorage para a migração nunca voltar a correr. **Se algum dia se
+  fizer outra correção à fórmula de calorias que também deva recalcular o
+  histórico, criar uma nova flag** (ex: `@calories_formula_v3_migrated`) —
+  não reutilizar esta, ou a migração antiga não volta a correr em telemóveis
+  que já a tenham feito.
+
 ## 6. Sincronização com o Health Connect (`utils/healthConnectSync.js`)
 
 - Só Android. A biblioteca `react-native-health-connect` é carregada com

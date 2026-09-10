@@ -337,18 +337,20 @@ describe('getFinalDistanceKm', () => {
 });
 
 describe('calculateCalories', () => {
-  // MET=8.5 se velocidade > 7km/h (corrida), MET=4.0 caso contrário (caminhada)
-  // kcal = MET * 3.5 * peso * (tempo_min / 200)
-  it('usa MET de corrida (8.5) quando a velocidade é > 7 km/h', () => {
-    // 5km em 30min = 10km/h > 7 → MET 8.5
-    // kcal = 8.5*3.5*70*(30/200) = 312.375 → arredonda para 312
-    expect(calculateCalories(5, 1800, 70)).toBe(312);
+  // Fórmula corrigida em 09/2026 (ver comentário em utils/calculations.js):
+  // MET contínuo a partir da velocidade real (equações ACSM), com o mesmo
+  // limiar de 7km/h para escolher entre caminhada e corrida.
+  // kcal = (VO2/3.5) * 3.5 * peso * (tempo_min) / 200 = VO2 * peso * tempo_min / 200
+  it('usa a equação ACSM de corrida quando a velocidade é > 7 km/h', () => {
+    // 5km em 30min = 10km/h > 7 → corrida: VO2 = 0.2*166.667+3.5 = 36.833
+    // kcal = 36.833*70*30/200 = 386.75 → arredonda para 387
+    expect(calculateCalories(5, 1800, 70)).toBe(387);
   });
 
-  it('usa MET de caminhada (4.0) quando a velocidade é ≤ 7 km/h', () => {
-    // 2km em 30min = 4km/h ≤ 7 → MET 4.0
-    // kcal = 4*3.5*70*(30/200) = 147
-    expect(calculateCalories(2, 1800, 70)).toBe(147);
+  it('usa a equação ACSM de caminhada quando a velocidade é ≤ 7 km/h', () => {
+    // 2km em 30min = 4km/h ≤ 7 → caminhada: VO2 = 0.1*66.667+3.5 = 10.167
+    // kcal = 10.167*70*30/200 = 106.75 → arredonda para 107
+    expect(calculateCalories(2, 1800, 70)).toBe(107);
   });
 
   it('usa 70kg por omissão quando não é dado nenhum peso', () => {
@@ -357,6 +359,27 @@ describe('calculateCalories', () => {
 
   it('devolve 0 quando o tempo é 0 (sem divisão por zero)', () => {
     expect(calculateCalories(0, 0, 70)).toBe(0);
+  });
+
+  // Bug reportado pelo utilizador (histórico real): sessões com a mesma
+  // duração mas distâncias bem diferentes davam sempre as mesmas calorias,
+  // porque a fórmula antiga só usava o tempo depois de escolher o MET.
+  it('dá calorias diferentes a sessões com a mesma duração mas distâncias diferentes', () => {
+    // Réplica das sessões 46 (3.74km) e 48 (4.37km) do histórico real do
+    // utilizador — ambas com 30:00 exatos, que na fórmula antiga davam as
+    // duas 419 kcal.
+    const calNivel16Sessao46 = calculateCalories(3.74, 1800, 94);
+    const calNivel16Sessao48 = calculateCalories(4.37, 1800, 94);
+    expect(calNivel16Sessao46).not.toBe(calNivel16Sessao48);
+    expect(calNivel16Sessao48).toBeGreaterThan(calNivel16Sessao46);
+  });
+
+  it('protege contra velocidades irreais (erro de GPS) limitando a 24km/h', () => {
+    // 1000km numa hora é fisicamente impossível — só pode ser ruído de GPS.
+    // Sem o limite, o MET dispararia para um valor absurdo; com o limite a
+    // 24km/h, o resultado fica sempre dentro de um intervalo plausível.
+    const result = calculateCalories(1000, 3600, 70);
+    expect(result).toBe(1754);
   });
 });
 

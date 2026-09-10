@@ -321,6 +321,40 @@ export default function App() {
     } catch (e) {}
   };
 
+  // --- Migração das calorias do histórico para a fórmula corrigida (09/2026) ---
+  // A fórmula antiga de calculateCalories tinha um bug: dentro do mesmo
+  // "lado" do limiar de 7km/h, o resultado só dependia do TEMPO, ignorando
+  // a distância real (ver comentário em utils/calculations.js). O
+  // utilizador pediu para recalcular também os registos já guardados, não
+  // só os exercícios futuros.
+  //
+  // Corre só UMA VEZ (marcado por '@calories_formula_v2_migrated' no
+  // AsyncStorage) — sem isto, recalcularia todo o histórico sempre que a
+  // app abrisse, sem necessidade. Usa o peso ATUAL do perfil para todos os
+  // registos, porque a app não guarda um "peso histórico" por sessão — é a
+  // mesma aproximação que a fórmula antiga já fazia (usava sempre o peso do
+  // perfil no momento em que cada exercício tinha terminado).
+  const migrateHistoryCaloriesIfNeeded = async (historyList, weightKg) => {
+    try {
+      const alreadyMigrated = await AsyncStorage.getItem('@calories_formula_v2_migrated');
+      if (alreadyMigrated || !historyList || historyList.length === 0) return historyList;
+
+      const migratedHistory = historyList.map((record) => {
+        if (typeof record.distanceKm !== 'number' || typeof record.timeSec !== 'number') return record;
+        return { ...record, calories: calculateCalories(record.distanceKm, record.timeSec, weightKg) };
+      });
+
+      await AsyncStorage.setItem('@user_history', JSON.stringify(migratedHistory));
+      await AsyncStorage.setItem('@calories_formula_v2_migrated', 'true');
+      setHistory(migratedHistory);
+      updateRecordsFromHistory(migratedHistory);
+      return migratedHistory;
+    } catch (e) {
+      console.error(e);
+      return historyList;
+    }
+  };
+
   const loadAppData = async () => {
     try {
       const savedFogOpacity = await AsyncStorage.getItem('@fog_opacity');
@@ -337,21 +371,23 @@ export default function App() {
       const savedSession = await AsyncStorage.getItem('@current_session_index');
       const savedCompleted = await AsyncStorage.getItem('@completed_sessions');
 
-      let parsedHistory = [];
-      if (savedHistory) {
-        parsedHistory = JSON.parse(savedHistory);
-        setHistory(parsedHistory);
-        updateRecordsFromHistory(parsedHistory);
-      }
-
+      let parsedProfile = null;
       if (savedProfile) {
-        const parsedProfile = JSON.parse(savedProfile);
+        parsedProfile = JSON.parse(savedProfile);
         setProfile(parsedProfile);
         if (!parsedProfile.weight || !parsedProfile.height || !parsedProfile.age) {
           setShowProfileAlert(true);
         }
       } else {
         setShowProfileAlert(true);
+      }
+
+      let parsedHistory = [];
+      if (savedHistory) {
+        parsedHistory = JSON.parse(savedHistory);
+        setHistory(parsedHistory);
+        updateRecordsFromHistory(parsedHistory);
+        await migrateHistoryCaloriesIfNeeded(parsedHistory, parsedProfile?.weight);
       }
 
       if (savedCompleted) setCompletedSessions(JSON.parse(savedCompleted));

@@ -273,12 +273,43 @@ export const getSuddenDeathProgress = (distanceKm, totalBlocks = 10, metersPerBl
 
 // --- CALORIAS ---
 // weightKg é opcional: passa o peso do perfil do utilizador; usa 70kg por omissão.
+//
+// NOTA (09/2026): esta fórmula foi corrigida a pedido do utilizador. A
+// versão anterior escolhia entre só DOIS valores fixos de MET (4.0 ou 8.5,
+// consoante a velocidade média fosse > 7km/h ou não) e depois calculava as
+// calorias só a partir do TEMPO — a velocidade só servia para escolher o
+// "lado do degrau", nunca mais entrava na conta. Resultado: duas sessões
+// com a mesma duração e do mesmo lado do limiar dos 7km/h davam sempre
+// exatamente as mesmas calorias, por muito diferente que fosse a distância
+// real percorrida (ex: Sessão 46 com 3.74km e Sessão 48 com 4.37km, ambas
+// com 30:00, davam as duas 419 kcal — 0.63km de diferença, 0kcal de
+// diferença).
+//
+// Agora o MET é calculado de forma CONTÍNUA a partir da velocidade real,
+// usando as equações padrão do ACSM (American College of Sports Medicine)
+// para consumo de oxigénio (VO2), em vez de um valor fixo:
+//   Caminhada: VO2 = 0.1 * velocidade(m/min) + 3.5
+//   Corrida:   VO2 = 0.2 * velocidade(m/min) + 3.5
+// Mantém-se o mesmo limiar de 7km/h já existente para escolher entre as
+// duas equações (caminhada vs. corrida), mas agora o MET varia sempre com
+// a velocidade real dentro de cada lado — por isso a distância volta a
+// refletir-se sempre no resultado, mesmo dentro do mesmo "lado" do limiar.
+//
+// A velocidade usada no cálculo é limitada a um máximo de 24km/h (mais
+// rápido que qualquer ritmo de corrida sustentado nestes desafios) só para
+// proteger contra picos de erro de GPS a inflacionar as calorias — não
+// afeta nenhum ritmo real destes exercícios.
 export const calculateCalories = (distKm, timeSec, weightKg = 70) => {
   const weight = parseFloat(weightKg) || 70;
   const hours = timeSec / 3600;
-  const speedKmH = hours > 0 ? distKm / hours : 0;
-  let met = 4.0;
-  if (speedKmH > 7) met = 8.5;
+  const speedKmH = hours > 0 ? Math.min(distKm / hours, 24) : 0;
+  const speedMMin = speedKmH * (1000 / 60); // velocidade em metros por minuto
+
+  const vo2 = speedKmH > 7
+    ? 0.2 * speedMMin + 3.5   // equação ACSM para corrida
+    : 0.1 * speedMMin + 3.5;  // equação ACSM para caminhada
+  const met = vo2 / 3.5;
+
   return Math.round((met * 3.5 * weight * (timeSec / 60)) / 200);
 };
 
