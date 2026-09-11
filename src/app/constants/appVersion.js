@@ -5,4 +5,4 @@
 // a partir de 08/09/2026: deve avançar uma décima (0.1) sempre que for
 // entregue uma atualização com alterações a esta app (ex: 1.0 -> 1.1 -> 1.2
 // ...). Atualizar este ficheiro sempre que se fizer uma entrega de código.
-export const APP_VERSION = '1.1';
+export const APP_VERSION = '1.2';

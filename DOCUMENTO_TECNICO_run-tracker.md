@@ -283,25 +283,29 @@ mecanismo — não há nenhuma recalculação a posteriori neste momento (ver
   se confundir com o ritmo ao vivo), logo a seguir à linha de
   distância/tempo de cada registo.
 
-### 5.5 Mapa — zoom/pan livres e botão de recentrar
+### 5.5 Mapa — segue a posição automaticamente, mas preserva o zoom do utilizador
 
-- `constants/mapHtml.js` (Leaflet): a versão original chamava
-  `map.setView(...)` a **cada** atualização de GPS, o que recentrava o mapa
-  sozinho constantemente e anulava qualquer zoom/pan manual do utilizador
-  durante o exercício.
-- Agora `map.setView()` só é chamado **uma vez**, na primeira posição GPS
-  recebida (zoom 17). Nas atualizações seguintes, só `marker.setLatLng(...)`
-  é chamado — a bola/traço seguem o utilizador, mas a vista do mapa
-  (posição + zoom) fica inteiramente sob controlo do utilizador (pinch-zoom
-  e arrastar já funcionavam antes via Leaflet; passou a existir também
-  `zoomControl: true`, com botões +/- visíveis).
-- Botão de recentrar: `ActiveExerciseScreen.js` tem um botão (📍,
-  `styles.mapRecenterBtn`) sobreposto ao canto do mapa, que chama
-  `onRecenterMap` (prop) → `recenterMap()` em `index.js` →
-  `webviewRef.current.injectJavaScript('recenterMap(); true;')`. A função
-  `recenterMap()` dentro do HTML do mapa faz
-  `map.setView([lastCoords], map.getZoom())` — repõe a vista sobre a
-  posição atual **sem** alterar o zoom que o utilizador tinha escolhido.
+- `constants/mapHtml.js` (Leaflet): numa primeira leitura do pedido do
+  utilizador, achou-se que ele queria o mapa completamente livre (sem
+  nenhum recentrar automático) — passou a chamar `map.setView(...)` só na
+  primeira posição GPS, e `marker.setLatLng(...)` (sem mover a vista) nas
+  seguintes. O utilizador corrigiu: não era isso — queria sim que o ponto
+  ficasse **sempre centrado automaticamente**, só não queria que o zoom
+  fosse reposto sozinho.
+- **Comportamento final:** `map.setView([current.lat, current.lng],
+  map.getZoom())` volta a ser chamado a **cada** atualização de GPS (o
+  ponto segue sempre centrado, sem o utilizador ter de tocar em nada) —
+  mas o segundo argumento é sempre `map.getZoom()` (o zoom **atual**,
+  escolhido pelo utilizador via pinch ou pelos botões +/- do
+  `zoomControl: true`), nunca um número fixo. Só a primeira posição GPS usa
+  um zoom fixo (17), para dar um enquadramento inicial sensato.
+- Botão de recentrar (📍, `styles.mapRecenterBtn` em
+  `ActiveExerciseScreen.js`, prop `onRecenterMap` → `recenterMap()` em
+  `index.js` → `webviewRef.current.injectJavaScript('recenterMap(); true;')`):
+  mantido para o caso de o utilizador arrastar o mapa manualmente (pan) e
+  querer voltar a ver o seu ponto centrado sem esperar pela próxima posição
+  GPS — com o seguimento automático já a correr a cada posição, é sobretudo
+  um botão de recurso para esse intervalo entre atualizações.
 
 ### 5.6 Calorias — bug corrigido (09/2026)
 

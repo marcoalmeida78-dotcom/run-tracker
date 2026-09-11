@@ -44,27 +44,27 @@ export const getLeafletMapHtml = (routeColor) => {
           marker = L.circleMarker([current.lat, current.lng], {
             radius: 8, color: '#ffffff', weight: 2, fillColor: '${color}', fillOpacity: 1
           }).addTo(map);
-          // Só centra automaticamente a PRIMEIRA vez que aparece um ponto.
+          // Primeira posição: centra com um zoom inicial fixo (17).
           map.setView([current.lat, current.lng], 17);
           hasCentered = true;
         } else {
-          // Ponto 3 (pedido do utilizador): a partir daqui só se atualiza a
-          // posição da bola/traço — NUNCA se chama map.setView() a cada
-          // atualização de GPS. Antes disso, o mapa recentrava-se sozinho em
-          // cada posição nova, o que anulava qualquer zoom/pan manual do
-          // utilizador. Agora o utilizador fica livre para fazer zoom in/out
-          // e mover o mapa à vontade durante o exercício; só volta a
-          // centrar-se se ele próprio carregar no botão de recentrar
-          // (ver recenterMap, chamado pelo lado nativo via injectJavaScript).
           marker.setLatLng([current.lat, current.lng]);
+          // A partir daqui, o mapa volta a seguir o utilizador
+          // automaticamente a cada posição nova — MAS usando sempre
+          // map.getZoom() (o zoom ATUAL, escolhido pelo próprio utilizador
+          // via pinch ou pelos botões +/-), nunca um valor fixo. Por isso
+          // o zoom nunca é reposto sozinho a 17 — só a posição é que segue
+          // o utilizador, o zoom fica sempre como ele o deixou.
+          map.setView([current.lat, current.lng], map.getZoom());
         }
       }
     }
 
-    // Chamada pelo botão de recentrar no ActiveExerciseScreen (nativo) via
-    // webviewRef.current.injectJavaScript('recenterMap(); true;'). Centra a
-    // vista sobre a última posição conhecida SEM alterar o zoom atual —
-    // liberdade total para o utilizador decidir a que zoom quer ver o mapa.
+    // Botão de recentrar (📍) em ActiveExerciseScreen: com o seguimento
+    // automático acima, só é mesmo necessário se o utilizador tiver
+    // arrastado o mapa manualmente (pan) e quiser voltar a ver o seu ponto
+    // no centro sem esperar pela próxima posição GPS. Também não altera o
+    // zoom atual.
     function recenterMap() {
       if (lastCoords) {
         map.setView([lastCoords.lat, lastCoords.lng], map.getZoom());
