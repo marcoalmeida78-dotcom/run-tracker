@@ -49,7 +49,16 @@ export default function RunProgramMenu({
                   {lvl.sessions.map((_sess, sIdx) => {
                     const globalIdx = index * 3 + sIdx;
                     const done = completedSessions.includes(globalIdx);
-                    return <View key={sIdx} style={[styles.levelProgressDot, done && styles.levelProgressDotDone]} />;
+                    return (
+                      <View
+                        key={sIdx}
+                        style={[
+                          styles.levelProgressDot,
+                          isCurrentLevel && styles.levelProgressDotActive,
+                          done && (isCurrentLevel ? styles.levelProgressDotDoneActive : styles.levelProgressDotDone),
+                        ]}
+                      />
+                    );
                   })}
                 </View>
               </View>

@@ -92,6 +92,14 @@ export const getStyles = (colors) => StyleSheet.create({
   // constants/themes.js). Passam a usar o verde-lima FIXO (LIME_GREEN),
   // igual ao do mapa/botão "Iniciar Corrida", independente do tema.
   levelProgressDotDone: { backgroundColor: LIME_GREEN, borderColor: LIME_GREEN },
+  // Correção (09/2026): no cabeçalho do nível ATUAL (levelHeaderActive, já
+  // verde-lima), estas mesmas bolas ficavam ilegíveis — verde-lima sobre
+  // verde-lima, sem nenhum contraste. Só neste cabeçalho, usa-se a mesma
+  // cor escura do texto (COLOR_ACCENT_TEXT) tanto nas bolas por fazer
+  // (contorno) como nas concluídas (preenchidas), para se distinguirem bem
+  // do fundo verde. Aplicadas em RunProgramMenu.js só quando isCurrentLevel.
+  levelProgressDotActive: { borderColor: colors.COLOR_ACCENT_TEXT },
+  levelProgressDotDoneActive: { backgroundColor: colors.COLOR_ACCENT_TEXT, borderColor: colors.COLOR_ACCENT_TEXT },
   levelProgressLabel: { fontSize: 10, fontWeight: '700', color: colors.COLOR_SECONDARY, marginLeft: 6 },
   levelProgressLabelDone: { color: colors.COLOR_LIME_ENERGY },
   levelDetailsContainer: { padding: 12, paddingTop: 0 },

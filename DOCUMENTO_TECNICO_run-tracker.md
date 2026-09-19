@@ -412,6 +412,47 @@ mecanismo — não há nenhuma recalculação a posteriori neste momento (ver
   `colors.COLOR_LIME_ENERGY` (essa, no tema único "Vidro Branco" atual, é
   branco — ver `constants/themes.js`). Se um dia se voltar a ter vários
   temas, confirmar que esta escolha continua a fazer sentido.
+- **Bug corrigido (09/2026)**: como o cabeçalho do nível atual passou a ser
+  verde-lima e as bolas preenchidas TAMBÉM são verde-lima, ficavam
+  ilegíveis nesse cabeçalho específico (verde sobre verde, sem contraste).
+  Correção em `RunProgramMenu.js`: quando `isCurrentLevel` é verdadeiro, as
+  bolas passam a usar `styles.levelProgressDotActive` (contorno) /
+  `styles.levelProgressDotDoneActive` (preenchida) — ambas na cor escura do
+  texto (`COLOR_ACCENT_TEXT`), só nesse cabeçalho. Nos outros níveis
+  (cabeçalho normal, não verde), as bolas continuam
+  `levelProgressDot`/`levelProgressDotDone` como antes.
+
+## 7.1 Melhor registo histórico nos desafios (caminhada e corrida)
+
+- **Bug corrigido (09/2026)**: o "🏆 O teu melhor" só aparecia no menu do
+  Teste de Cooper (`ChallengesMenu.js`, via `getBestCooperClassification`)
+  — nenhum outro desafio de caminhada ou corrida mostrava o melhor registo
+  no menu antes de começar, mesmo já tendo um guardado no histórico (ex:
+  Desafio 1 Milha).
+- **Correção**: `ChallengesMenu.js` e `WalksMenu.js` agora mostram sempre
+  "🏆 O teu melhor" (quando existe) em todos os desafios (não nas versões
+  "livre", que não têm alvo fixo). A métrica usada depende do tipo de
+  desafio:
+  - **Alvo = distância fixa** (o que varia é o tempo a completá-la):
+    `getBestTimeForTitle` — Rockport, 2km sem olhar, 1,5 Milhas, 1 Milha,
+    Morte Súbita, 5km/30min. Mesmo mecanismo já usado em
+    `ActiveExerciseScreen.js` para o "🏆 Melhor tempo" ao vivo.
+  - **Alvo = tempo fixo** (o que varia é a distância percorrida nesse
+    tempo): `getBestDistanceForTitle` — 10 Minutos, Só até à Esquina
+    (soma-se a distância total da sessão, incluindo repetições de 500m).
+  - **Teste de Cooper**: continua à parte, com a classificação
+    (`getBestCooperClassification`), não com tempo/distância brutos — os
+    12 minutos são sempre fixos, por isso não faz sentido nenhuma das
+    outras duas métricas.
+- `WalksMenu.js` passou a receber a prop `history` (antes não recebia
+  nenhuma) — vinda de `MainScreen.js`, que já a tinha disponível.
+- **Nota**: `getBestTimeForTitle`/`getBestDistanceForTitle` não filtram por
+  sucesso/falha do desafio (ex: um "Desafio 2km" onde se olhou para o
+  telemóvel a meio, ou um "Morte Súbita" falhado a meio dos blocos, também
+  contam para o "melhor"). Isto já era assim antes desta correção (mesmo
+  mecanismo usado em vários sítios da app) — não foi alterado agora, mas
+  fica registado caso um dia se queira filtrar só por tentativas bem
+  sucedidas.
 
 ## 8. Frase motivacional (`MotivationalQuote.js`)
 

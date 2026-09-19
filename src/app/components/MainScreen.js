@@ -101,7 +101,7 @@ export default function MainScreen({
       </View>
 
       {activeMenu === 'caminhadas' && (
-        <WalksMenu styles={styles} onClose={() => onToggleAccordion('caminhadas')} onStartExercise={onStartExercise} />
+        <WalksMenu styles={styles} onClose={() => onToggleAccordion('caminhadas')} onStartExercise={onStartExercise} history={history} />
       )}
 
       {activeMenu === 'corrida' && (
